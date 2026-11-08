@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Statement Sweep",
+  "version": "0.1.0",
+  "description": "Saves your own official statements from sites you are already signed in to. Runs in your browser and sends nothing anywhere.",
+  "action": { "default_popup": "popup.html", "default_title": "Statement Sweep" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["downloads", "scripting", "storage"],
+  "host_permissions": ["https://myenergycenter.com/*"]
+}
