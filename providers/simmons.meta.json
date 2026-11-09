@@ -1,0 +1,11 @@
+{
+  "id": "simmons",
+  "name": "Simmons Bank",
+  "match": [
+    "https://login.simmonsbank.com/*"
+  ],
+  "listUrl": "https://login.simmonsbank.com/documents",
+  "pageFile": "providers/simmons.page.js",
+  "fileName": "{date} Simmons Bank {title}.pdf",
+  "family": "fetch"
+}

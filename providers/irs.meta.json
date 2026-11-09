@@ -1,0 +1,11 @@
+{
+  "id": "irs",
+  "name": "IRS",
+  "match": [
+    "https://sa.www4.irs.gov/*"
+  ],
+  "listUrl": "https://sa.www4.irs.gov/ola/tax_records/transcripts",
+  "pageFile": "providers/irs.page.js",
+  "fileName": "{date} IRS {title}.pdf",
+  "family": "fetch"
+}

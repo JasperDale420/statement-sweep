@@ -1,0 +1,13 @@
+{
+  "id": "coinbase",
+  "name": "Coinbase",
+  "match": [
+    "https://accounts.coinbase.com/*",
+    "https://www.coinbase.com/*"
+  ],
+  "listUrl": "https://accounts.coinbase.com/statements",
+  "pageFile": "providers/coinbase.page.js",
+  "fileName": "{date} Coinbase Monthly Statement.pdf",
+  "family": "click",
+  "downloadWaitSeconds": 90
+}

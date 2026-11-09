@@ -1,0 +1,12 @@
+{
+  "id": "optum",
+  "name": "Optum Bank",
+  "match": [
+    "https://account.optumbank.com/*",
+    "https://www.optumbank.com/*"
+  ],
+  "listUrl": "https://account.optumbank.com/account/help/forms",
+  "pageFile": "providers/optum.page.js",
+  "fileName": "{date} Optum Bank {title}.pdf",
+  "family": "fetch"
+}

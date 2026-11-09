@@ -1,0 +1,12 @@
+{
+  "id": "schwab",
+  "name": "Charles Schwab",
+  "match": [
+    "https://client.schwab.com/*"
+  ],
+  "listUrl": "https://client.schwab.com/retail/accounts/statements/",
+  "pageFile": "providers/schwab.page.js",
+  "fileName": "{date} Charles Schwab {title}.pdf",
+  "family": "fetch",
+  "enabled": false
+}

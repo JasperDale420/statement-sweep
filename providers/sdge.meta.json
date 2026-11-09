@@ -1,0 +1,11 @@
+{
+  "id": "sdge",
+  "name": "SDG&E",
+  "match": [
+    "https://myenergycenter.com/*"
+  ],
+  "listUrl": "https://myenergycenter.com/portal/BillingHistory/index",
+  "pageFile": "providers/sdge.page.js",
+  "fileName": "{date} SDG&E Utility Bill.pdf",
+  "family": "fetch"
+}

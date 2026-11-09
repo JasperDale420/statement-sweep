@@ -1,0 +1,11 @@
+{
+  "id": "chase",
+  "name": "Chase",
+  "match": [
+    "https://secure.chase.com/*"
+  ],
+  "listUrl": "https://secure.chase.com/web/auth/dashboard#/dashboard/documents/myDocs/index",
+  "pageFile": "providers/chase.page.js",
+  "fileName": "{date} Chase {title} Statement.pdf",
+  "family": "click"
+}

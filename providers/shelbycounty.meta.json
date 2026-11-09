@@ -1,0 +1,11 @@
+{
+  "id": "shelbycounty",
+  "name": "Shelby County Trustee",
+  "match": [
+    "https://apps2.shelbycountytrustee.com/*"
+  ],
+  "listUrl": "https://apps2.shelbycountytrustee.com/Parcel",
+  "pageFile": "providers/shelbycounty.page.js",
+  "fileName": "{date} Shelby County Trustee {title}.pdf",
+  "family": "fetch"
+}

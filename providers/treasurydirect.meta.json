@@ -1,0 +1,13 @@
+{
+  "id": "treasurydirect",
+  "name": "TreasuryDirect",
+  "match": [
+    "https://www.treasurydirect.gov/*",
+    "https://treasurydirect.gov/*"
+  ],
+  "listUrl": "https://www.treasurydirect.gov/RS/UN-Display.do",
+  "pageFile": "providers/treasurydirect.page.js",
+  "fileName": "{date} TreasuryDirect {title}.pdf",
+  "family": "print",
+  "enabled": false
+}

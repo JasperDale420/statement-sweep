@@ -1,0 +1,13 @@
+{
+  "id": "apple",
+  "name": "Apple",
+  "match": [
+    "https://www.apple.com/*",
+    "https://*.store.apple.com/*"
+  ],
+  "listUrl": "https://www.apple.com/shop/order/list",
+  "pageFile": "providers/apple.page.js",
+  "fileName": "{date} Apple {title} Invoice.pdf",
+  "family": "print",
+  "enabled": false
+}

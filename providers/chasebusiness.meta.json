@@ -1,0 +1,12 @@
+{
+  "id": "chasebusiness",
+  "name": "Chase Business",
+  "match": [
+    "https://secure.chase.com/*"
+  ],
+  "listUrl": "https://secure.chase.com/web/auth/dashboard#/dashboard/documents/myDocs/index",
+  "pageFile": "providers/chasebusiness.page.js",
+  "fileName": "{date} Chase {title} Statement.pdf",
+  "family": "click",
+  "downloadWaitSeconds": 60
+}

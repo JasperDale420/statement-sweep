@@ -1,0 +1,12 @@
+{
+  "id": "fidelity",
+  "name": "Fidelity",
+  "match": [
+    "https://digitalservices.fidelity.com/*",
+    "https://digital.fidelity.com/*"
+  ],
+  "listUrl": "https://digitalservices.fidelity.com/navigate/ent-documentcenter/statements?poe=fidcom",
+  "pageFile": "providers/fidelity.page.js",
+  "fileName": "{date} Fidelity {title}.pdf",
+  "family": "fetch"
+}

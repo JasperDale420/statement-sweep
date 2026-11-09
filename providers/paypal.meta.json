@@ -1,0 +1,11 @@
+{
+  "id": "paypal",
+  "name": "PayPal",
+  "match": [
+    "https://www.paypal.com/*"
+  ],
+  "listUrl": "https://www.paypal.com/myaccount/statements/monthly",
+  "pageFile": "providers/paypal.page.js",
+  "fileName": "{date} PayPal Monthly Statement.pdf",
+  "family": "fetch"
+}

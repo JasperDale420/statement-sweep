@@ -1,0 +1,13 @@
+{
+  "id": "netbenefits",
+  "name": "Fidelity NetBenefits",
+  "match": [
+    "https://workplaceservices.fidelity.com/*",
+    "https://nb.fidelity.com/*"
+  ],
+  "listUrl": "https://workplaceservices.fidelity.com/mybenefits/savings2/navigation/dc/OnlineStatement",
+  "pageFile": "providers/netbenefits.page.js",
+  "fileName": "{date} NetBenefits {title}.pdf",
+  "family": "print",
+  "enabled": false
+}

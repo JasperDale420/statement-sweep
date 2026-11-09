@@ -1,0 +1,12 @@
+{
+  "id": "bilt",
+  "name": "Bilt Card",
+  "match": [
+    "https://www.bilt.com/*"
+  ],
+  "listUrl": "https://www.bilt.com/wallet",
+  "pageFile": "providers/bilt.page.js",
+  "fileName": "{date} Bilt Card Statement.pdf",
+  "family": "click",
+  "enabled": false
+}

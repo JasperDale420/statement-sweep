@@ -1,0 +1,12 @@
+{
+  "id": "alpaca",
+  "name": "Alpaca",
+  "match": [
+    "https://app.alpaca.markets/*"
+  ],
+  "listUrl": "https://app.alpaca.markets/account/documents",
+  "pageFile": "providers/alpaca.page.js",
+  "fileName": "{date} Alpaca {title}.pdf",
+  "family": "click",
+  "downloadWaitSeconds": 60
+}

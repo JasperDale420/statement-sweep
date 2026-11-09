@@ -1,0 +1,12 @@
+{
+  "id": "statefarm",
+  "name": "State Farm",
+  "match": [
+    "https://edocuments.statefarm.com/*"
+  ],
+  "listUrl": "https://edocuments.statefarm.com/DocumentCenterUI/",
+  "pageFile": "providers/statefarm.page.js",
+  "fileName": "{date} State Farm {title}.pdf",
+  "family": "fetch",
+  "enabled": false
+}

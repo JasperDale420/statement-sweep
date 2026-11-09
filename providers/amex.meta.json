@@ -1,0 +1,13 @@
+{
+  "id": "amex",
+  "name": "American Express",
+  "match": [
+    "https://global.americanexpress.com/*",
+    "https://www.americanexpress.com/*"
+  ],
+  "listUrl": "https://global.americanexpress.com/activity/statements",
+  "pageFile": "providers/amex.page.js",
+  "fileName": "{date} American Express {title}.pdf",
+  "family": "click",
+  "downloadWaitSeconds": 90
+}

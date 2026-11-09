@@ -1,0 +1,12 @@
+{
+  "id": "spectrum",
+  "name": "Spectrum",
+  "match": [
+    "https://www.spectrum.net/*"
+  ],
+  "listUrl": "https://www.spectrum.net/billing/statements",
+  "pageFile": "providers/spectrum.page.js",
+  "fileName": "{date} Spectrum Internet Statement.pdf",
+  "family": "click",
+  "enabled": false
+}

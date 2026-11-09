@@ -1,0 +1,14 @@
+{
+  "id": "ibkr",
+  "name": "Interactive Brokers",
+  "match": [
+    "https://www.interactivebrokers.com/*",
+    "https://www.interactivebrokers.co.uk/*",
+    "https://www.interactivebrokers.ie/*"
+  ],
+  "listUrl": "https://www.interactivebrokers.com/AccountManagement/AmAuthentication?action=RM_STATEMENTS&service=AM.LOGIN&webaccess=true",
+  "pageFile": "providers/ibkr.page.js",
+  "fileName": "{date} Interactive Brokers {title}.pdf",
+  "family": "click",
+  "downloadWaitSeconds": 90
+}

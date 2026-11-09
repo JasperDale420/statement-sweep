@@ -1,0 +1,11 @@
+{
+  "id": "wealthfront",
+  "name": "Wealthfront",
+  "match": [
+    "https://www.wealthfront.com/*"
+  ],
+  "listUrl": "https://www.wealthfront.com/documents",
+  "pageFile": "providers/wealthfront.page.js",
+  "fileName": "{date} Wealthfront {title}.pdf",
+  "family": "fetch"
+}

@@ -1,10 +1,45 @@
 {
   "manifest_version": 3,
   "name": "Statement Sweep",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Saves your own official statements from sites you are already signed in to. Runs in your browser and sends nothing anywhere.",
-  "action": { "default_popup": "popup.html", "default_title": "Statement Sweep" },
-  "background": { "service_worker": "background.js", "type": "module" },
-  "permissions": ["downloads", "scripting", "storage"],
-  "host_permissions": ["https://myenergycenter.com/*"]
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Statement Sweep"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "contentSettings",
+    "downloads",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://account.optumbank.com/*",
+    "https://accounts.coinbase.com/*",
+    "https://app.alpaca.markets/*",
+    "https://apps2.shelbycountytrustee.com/*",
+    "https://auth.nelnet.studentaid.gov/*",
+    "https://card.apple.com/*",
+    "https://digital.fidelity.com/*",
+    "https://digital.firsthorizon.com/*",
+    "https://digitalservices.fidelity.com/*",
+    "https://global.americanexpress.com/*",
+    "https://login.simmonsbank.com/*",
+    "https://myenergycenter.com/*",
+    "https://nelnet.studentaid.gov/*",
+    "https://sa.www4.irs.gov/*",
+    "https://secure.chase.com/*",
+    "https://www.americanexpress.com/*",
+    "https://www.coinbase.com/*",
+    "https://www.interactivebrokers.co.uk/*",
+    "https://www.interactivebrokers.com/*",
+    "https://www.interactivebrokers.ie/*",
+    "https://www.optumbank.com/*",
+    "https://www.paypal.com/*",
+    "https://www.wealthfront.com/*"
+  ]
 }

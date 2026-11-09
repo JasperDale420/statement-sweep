@@ -1,0 +1,11 @@
+{
+  "id": "applecard",
+  "name": "Apple Card",
+  "match": [
+    "https://card.apple.com/*"
+  ],
+  "listUrl": "https://card.apple.com/",
+  "pageFile": "providers/applecard.page.js",
+  "fileName": "{date} Apple Card Statement.pdf",
+  "family": "click"
+}

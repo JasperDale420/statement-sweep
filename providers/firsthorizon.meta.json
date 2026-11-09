@@ -1,0 +1,12 @@
+{
+  "id": "firsthorizon",
+  "name": "First Horizon Bank",
+  "match": [
+    "https://digital.firsthorizon.com/*"
+  ],
+  "listUrl": "https://digital.firsthorizon.com/#accounts/documents",
+  "pageFile": "providers/firsthorizon.page.js",
+  "fileName": "{date} First Horizon Bank Statement.pdf",
+  "family": "click",
+  "downloadWaitSeconds": 60
+}

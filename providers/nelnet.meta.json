@@ -1,0 +1,12 @@
+{
+  "id": "nelnet",
+  "name": "Nelnet",
+  "match": [
+    "https://nelnet.studentaid.gov/*",
+    "https://auth.nelnet.studentaid.gov/*"
+  ],
+  "listUrl": "https://nelnet.studentaid.gov/documents/inbox-statements",
+  "pageFile": "providers/nelnet.page.js",
+  "fileName": "{date} Nelnet {title}.pdf",
+  "family": "click"
+}
