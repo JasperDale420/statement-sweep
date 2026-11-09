@@ -64,7 +64,7 @@ def load(tab, url, body):
     tab.unroute("**/*")
     tab.route("**/*", lambda route: route.fulfill(status=200, content_type="text/html", body=f"<!doctype html><meta charset=utf-8>{body}"))
     tab.goto(url)
-    source = (ROOT / "providers" / "amex.page.js").read_text().replace("LIST_WAIT_MS = 12000", "LIST_WAIT_MS = 300").replace("DIALOG_WAIT_MS = 10000", "DIALOG_WAIT_MS = 500").replace("WALK_WAIT_MS = 30000", "WALK_WAIT_MS = 300")
+    source = (ROOT / "providers" / "amex.page.js").read_text().replace("LIST_WAIT_MS = 12000", "LIST_WAIT_MS = 300").replace("DIALOG_WAIT_MS = 10000", "DIALOG_WAIT_MS = 500").replace("WALK_WAIT_MS = 30000", "WALK_WAIT_MS = 300").replace("CARD_WAIT_MS = 15000", "CARD_WAIT_MS = 300").replace("SWITCHER_WAIT_MS = 5000", "SWITCHER_WAIT_MS = 300").replace("EMPTY_WAIT_MS = 3000", "EMPTY_WAIT_MS = 100")
     tab.add_script_tag(content=source)
 
 
@@ -134,6 +134,64 @@ def test_a_walk_opens_older_statements_once(tab):
     load(tab, LIST, page(row("2026-08-14"), older))
     assert walk(tab)["state"] == "walking"
     assert walk(tab)["state"] == "ok"
+
+
+# A statements page whose card switcher really changes the card.
+CARDS = """<main id="m"></main><script>
+const data = {A: ['Blue', '••••12345', ['2026-09-09', '2026-08-09']], B: ['Gold', '••••67890', ['2026-09-20']], C: ['Green', '••••11111', []]};
+let on = 'A', open = false; window.moves = []; window.frozen = false;
+const name = (n, d) => `<span data-testid="simple_switcher_display_name">${n}</span><span data-testid="simple_switcher_display_number">${d}</span>`;
+function list() {
+  const rows = data[on][2].map(d => `<button data-testid="x/recent-statements/${d}/download-button">Download</button>`).join('');
+  return `<section id="table-area">${rows || 'There are no statements available'}</section>`;
+}
+function draw() {
+  const opts = open ? Object.keys(data).filter(k => k !== on).map(k => `<div role="option" data-testid="simple_switcher_product_option_${k}">${name(data[k][0], data[k][1])}</div>`).join('') : '';
+  document.getElementById('m').innerHTML = `<div data-testid="simple_switcher_combobox" role="combobox">${name(data[on][0], data[on][1])}</div>${opts}<div id="list">${list()}</div>`;
+}
+draw();
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[role=combobox], [role=option]'); if (!t) return;
+  if (t.getAttribute('role') === 'combobox') { open = !open; draw(); return; }
+  const key = t.dataset.testid.split('_').pop();
+  const kept = document.getElementById('list');
+  on = key; open = false; moves.push(key); draw();
+  if (frozen) document.getElementById('list').replaceWith(kept);
+});
+</script>"""
+
+
+def sweep_cards(tab):
+    ids = []
+    for _ in range(10):
+        got = walk(tab)
+        assert got["state"] == "ok", got
+        ids += [d["id"] for d in got["docs"]]
+        if not got.get("more"):
+            break
+        step = tab.evaluate("__sweep.nextView()")
+        assert "why" not in step, step
+        if not step["moved"]:
+            break
+    return ids
+
+
+def test_a_sweep_reads_every_card_in_the_switcher_once(tab):
+    load(tab, LIST, CARDS)
+    assert sweep_cards(tab) == ["12345:stmt:2026-09-09", "12345:stmt:2026-08-09", "67890:stmt:2026-09-20"]
+    assert tab.evaluate("moves") == ["B", "C"]
+
+
+def test_a_walked_cards_documents_are_named_for_the_card(tab):
+    load(tab, LIST, CARDS)
+    assert walk(tab)["docs"][0]["title"] == "Monthly Statement Blue (12345)"
+
+
+def test_the_old_cards_downloads_still_showing_stop_the_sweep(tab):
+    load(tab, LIST, CARDS)
+    tab.evaluate("window.frozen = true")
+    walk(tab)
+    assert "did not redraw" in tab.evaluate("__sweep.nextView()")["why"]
 
 
 def test_a_login_address_is_known(tab):

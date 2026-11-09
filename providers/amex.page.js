@@ -11,6 +11,9 @@
   const LIST_WAIT_MS = 12000;
   const DIALOG_WAIT_MS = 10000;
   const WALK_WAIT_MS = 30000;
+  const CARD_WAIT_MS = 15000;
+  const SWITCHER_WAIT_MS = 5000;
+  const EMPTY_WAIT_MS = 3000;
   const WALKING = { state: "walking" };
   const ACTIVITY_WORDS = /statements?\s*&\s*activity/i;
   const PDF_WORDS = /go to pdf statements/i;
@@ -152,6 +155,53 @@
     return WALKING;
   }
 
+  async function waitFor(test, ms) {
+    const end = Date.now() + ms;
+    while (!test()) {
+      if (Date.now() >= end) return false;
+      await sleep(150);
+    }
+    return true;
+  }
+
+  // The cards this sweep has read, kept on the page between askings.
+  const cardsRead = () => (globalThis.__amexCards = globalThis.__amexCards || new Set());
+  const digitsOf = (option) => {
+    const number = option.querySelector(NUMBER);
+    return number ? number.textContent.replace(/\D/g, "") : "";
+  };
+
+  // The next card in Amex's switcher that has not been read. Every Download
+  // of the old card must be gone first, or its statements would be saved
+  // under the new card's name: a stop beats a wrong PDF.
+  async function nextView() {
+    const done = cardsRead();
+    const card = cardOnShow();
+    if (!card || !/^\d{4,6}$/.test(card.digits)) return { why: "The card on show could not be read." };
+    done.add(card.digits);
+    const finished = () => { delete globalThis.__amexCards; return { moved: false }; };
+    const box = firstShown(COMBOBOX);
+    if (!box) return finished();
+    if (!firstShown(OPTION)) {
+      box.click();
+      if (!(await waitFor(() => firstShown(OPTION), SWITCHER_WAIT_MS))) return { why: "Amex's card switcher did not open." };
+    }
+    const next = Array.from(document.querySelectorAll(OPTION)).filter(shown).find((o) => /^\d{4,6}$/.test(digitsOf(o)) && !done.has(digitsOf(o)));
+    if (!next) {
+      const open = firstShown(COMBOBOX);
+      if (open) open.click();
+      return finished();
+    }
+    const digits = digitsOf(next);
+    const held = Array.from(document.querySelectorAll(DOWNLOADS)).filter(shown);
+    const wasEmpty = !held.length && saysNone();
+    next.click();
+    if (!(await waitFor(() => (cardOnShow() || {}).digits === digits, CARD_WAIT_MS))) return { why: "Amex did not change to the card chosen." };
+    if (!(await waitFor(() => !held.some(shown), CARD_WAIT_MS))) return { why: "Amex did not redraw its statements for the card chosen." };
+    if (wasEmpty) await waitFor(() => !saysNone(), EMPTY_WAIT_MS);
+    return { moved: true };
+  }
+
   async function readList(options = {}) {
     const result = await readPage(options);
     if (result.state !== "walking") delete globalThis.__amexWalk;
@@ -188,7 +238,7 @@
       const date = kind === "stmt" ? when : `${when}-12-31`;
       if (!realDate(date)) return { state: "stopped", why: "A statement's date could not be read.", docs };
       const words = kind === "stmt" ? "Monthly Statement" : "Year-End Summary";
-      docs.push({ id: digits ? `${digits}:${key}` : key, date, method: "click", title: others.none || !card ? words : `${words} ${card.name} (${card.digits})` });
+      docs.push({ id: digits ? `${digits}:${key}` : key, date, method: "click", title: (others.none && !mayWalk) || !card ? words : `${words} ${card.name} (${card.digits})` });
     }
     docs.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     const older = document.querySelector("[aria-controls='content-older-statements']");
@@ -196,6 +246,7 @@
       if (mayWalk && press(older, "older statements")) return WALKING;
       return { state: "stopped", why: "Older Statements is closed on the page. Open it and sweep again.", docs };
     }
+    if (mayWalk && firstShown(COMBOBOX)) return { state: "ok", docs, more: true };
     return others.why ? { state: "ok", docs, note: others.why } : { state: "ok", docs };
   }
 
@@ -253,5 +304,5 @@
     return { ok: true };
   }
 
-  globalThis.__sweep = { readList, clickDoc };
+  globalThis.__sweep = { readList, clickDoc, nextView };
 })();
