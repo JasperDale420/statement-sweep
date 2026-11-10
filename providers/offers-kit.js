@@ -102,7 +102,8 @@
   }
 
   // "Expires 12/31/2026", "Exp. 1/5/27", "Expires Dec 31, 2026" as YYYY-MM-DD,
-  // or "" when no date is said.
+  // or "" when no date is said. A count of days ("12 days left", "Expires in
+  // 3 days", as Chase writes it) is counted from today, here in the page.
   const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
   function expiresOf(text) {
     const t = tidy(text);
@@ -113,6 +114,16 @@
     }
     m = /\bexp(?:ires|\.|iration)?(?:\s+on)?\s*:?\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b/i.exec(t);
     if (m) return iso(Number(m[3]), MONTHS.indexOf(m[1].toLowerCase()) + 1, Number(m[2]));
+    m = /\b(\d{1,3})\s+days?\s+left\b/i.exec(t) || /\b(?:expires|ends)\s+in\s+(\d{1,3})\s+days?\b/i.exec(t);
+    if (m) {
+      const d = new Date();
+      d.setDate(d.getDate() + Number(m[1]));
+      return iso(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    }
+    if (/\b(expires|ends) today\b|\blast day\b/i.test(t)) {
+      const d = new Date();
+      return iso(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    }
     return "";
   }
   function iso(y, mo, d) {

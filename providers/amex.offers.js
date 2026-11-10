@@ -32,6 +32,7 @@
   const OPTION = byTest("^=", "simple_switcher_product_option_");
   const NUMBER = byTest("=", "simple_switcher_display_number");
   const SELECTED = byTest("=", "simple_switcher_selected_option_display");
+  const NAME = byTest("=", "simple_switcher_display_name");
   const HOW_TO_GET_THERE = "Open Offers in this tab and sync again.";
 
   const onAmex = () => location.hostname.endsWith("americanexpress.com");
@@ -59,6 +60,13 @@
     const num = Array.from(box.querySelectorAll(NUMBER)).find(K.shown);
     const digits = (num ? num.innerText : "").replace(/\D/g, "");
     return /^\d{4,6}$/.test(digits) ? digits : "";
+  }
+  // The card's own name ("Gold Card"), from the same switcher box, for the
+  // Card Offers page. Only kept in this browser, never logged.
+  function cardNameOnShow() {
+    const box = firstShown(SELECTED) || firstShown(COMBOBOX);
+    const name = box && Array.from(box.querySelectorAll(NAME)).find(K.shown);
+    return name ? K.tidy(name.innerText).replace(/\d+/g, "").trim().slice(0, 40) : "";
   }
   const optionDigits = () => new Set(Array.from(document.querySelectorAll(OPTION)).map(digitsOf).filter((d) => /^\d{4,6}$/.test(d)));
 
@@ -174,7 +182,8 @@
     const offers = offersOnPage(card);
     const onCards = addedCount();
     const others = [...optionDigits()].filter((d) => d !== card);
-    const result = { state: "ok", card, offers, ...(onCards === null ? {} : { onCards }) };
+    const cardName = cardNameOnShow();
+    const result = { state: "ok", card, ...(cardName ? { cardName } : {}), offers, ...(onCards === null ? {} : { onCards }) };
     // With a switcher, there may be other cards: nextCard finds out.
     if (switcher && (others.length || !optionDigits().size)) result.more = true;
     return result;

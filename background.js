@@ -7,7 +7,7 @@ import { makeCapture } from "./capture.js";
 import { INBOX, getFolder, isGranted, moveFromInbox, withinChosen, writeFile } from "./folders.js";
 import { backfillFor, documentDate, isDue, isTaxDocument, keysFor, localIso, recordOf, siteStatus } from "./cadence.js";
 import { amount, cleanUrl, errorText, makeLogs } from "./log.js";
-import { hasOffers, makeOffers, offersWanted, offersWords } from "./offers.js";
+import { OFFERS_WAIT, hasOffers, makeOffers, offersWanted, offersWords } from "./offers.js";
 
 // The run's logs (log.js): what each site did and why it stopped, written to
 // each site's Logs folder as the run goes. `note` adds one line for a site.
@@ -121,13 +121,16 @@ async function timed(provider, step, work) {
 
 // A line on the board carries its site's tab while that tab is open, for the
 // popup's Show button. Written in the order said, through the one chain.
-async function say(id, state, text) {
+// `offers`, {kind, text}, is the card offers' own line under it: adding,
+// capped, stopped, waiting or done. It never changes the site's state, and
+// is not logged here, since it can name a card.
+async function say(id, state, text, offers) {
   logs.state(providerOf(id), state, text);
   const tabId = tabFor.get(id);
   await serially(async () => {
     const tab = tabId === undefined ? null : await chrome.tabs.get(tabId).catch(() => null);
     const { board = {} } = await chrome.storage.session.get("board");
-    board[id] = { state, text, at: Date.now(), ...(tab ? { tab: tab.id } : {}) };
+    board[id] = { state, text, at: Date.now(), ...(tab ? { tab: tab.id } : {}), ...(offers ? { offers } : {}) };
     await chrome.storage.session.set({ board });
     await badge(board);
   });
@@ -924,22 +927,11 @@ async function sweep(provider, together = false) {
   // Card offers, when you turned them on for this site, in the same tab and
   // sign-in, once every statement it found is saved: a statement that did
   // not save keeps the tab on its list for the next run. What the offers did
-  // is only ever a note on the line; it never changes how the site stands.
-  let offered = "";
+  // is only ever a line of its own; it never changes how the site stands.
+  const done = [count ? `${count} new.` : "Nothing new.", ...new Set(notes)].join(" ");
+  let offered;
   if (hasOffers(provider) && (await offersWanted(provider))) {
-    if (failed) {
-      offered = "Card offers wait until every statement here has saved.";
-    } else {
-      await say(provider.id, "working", "Looking at card offers…");
-      const sum = await timed(provider, "offers", () => offers.run(tab.id, provider, {
-        ours, progress: (text) => say(provider.id, "working", text),
-      })).catch((e) => {
-        logs.error(provider, "adding card offers", e);
-        return { added: 0, already: 0, why: tabGone(e) ? `${provider.name}'s tab closed.` : "That did not finish." };
-      });
-      offered = offersWords(sum).text;
-      note(provider, `Offers: ${sum.added || 0} added, ${sum.left || 0} left, ${sum.failed || 0} not added${sum.capped ? ", stopped at the cap" : ""}${sum.why ? `, stopped: ${sum.why}` : ""}.`);
-    }
+    offered = failed ? { kind: "waiting", text: OFFERS_WAIT } : await offersPass(provider, tab.id, ours, done);
   }
   if (failed) {
     const other = count ? (failed === 1 ? " other" : " others") : "";
@@ -948,14 +940,77 @@ async function sweep(provider, together = false) {
     const [state, head] = count ? ["ok", `${count} new.`] : ["bad", "0 saved."];
     // The sweep's own tab stays open on the documents that did not save.
     if (!ours) tabFor.delete(provider.id);
-    return say(provider.id, state, [`${head} ${them} tried again next time. ${lastWhy}`.trim(), ...new Set(notes), offered].filter(Boolean).join(" "));
+    return say(provider.id, state, [`${head} ${them} tried again next time. ${lastWhy}`.trim(), ...new Set(notes)].filter(Boolean).join(" "), offered);
   }
   await closeOurs();
   // Looked, and all there was is saved: the popup waits a few days before
   // asking for this site again, even if a new one is due by its schedule.
   await chrome.storage.local.set({ [`checked:${provider.id}`]: localIso() });
   // A note is something worth knowing about a sweep that did all it could.
-  return say(provider.id, "ok", [count ? `${count} new.` : "Nothing new.", ...new Set(notes), offered].filter(Boolean).join(" "));
+  return say(provider.id, "ok", done, offered);
+}
+
+// The card offers pass, in a tab already signed in to the site: after a
+// site's statements, or alone for Add Offers Now. `text` is the statements'
+// line, which stays as it is while the offers line counts up. Answers the
+// offers line to keep, {kind, text}.
+async function offersPass(provider, tabId, ours, text) {
+  const line = (words) => say(provider.id, "working", text, { kind: "adding", text: words });
+  await line("Looking at card offers…");
+  const sum = await timed(provider, "offers", () => offers.run(tabId, provider, { ours, progress: line })).catch((e) => {
+    logs.error(provider, "adding card offers", e);
+    return { added: 0, already: 0, why: tabGone(e) ? `${provider.name}'s tab closed.` : "That did not finish." };
+  });
+  note(provider, `Offers: ${sum.added || 0} added, ${sum.left || 0} left, ${sum.failed || 0} not added${sum.capped ? `, stopped at the cap with ${sum.waiting || 0} waiting` : ""}${sum.why ? `, stopped: ${sum.why}` : ""}.`);
+  const { kind, text: words } = offersWords(sum);
+  return { kind, text: words };
+}
+
+// Add Offers Now, from the Card Offers page: only the offers pass for one
+// site, no statements. Its tab is found or opened, and a sign-in waited for,
+// as a sweep's is; then the same engine, cap, pace and stops. The site's
+// statements line is kept as the last sweep left it.
+async function offersOnly(provider) {
+  const { board = {} } = await chrome.storage.session.get("board");
+  const was = board[provider.id] && ["ok", "bad"].includes(board[provider.id].state) ? board[provider.id] : null;
+  const state = was ? was.state : "ok";
+  const text = was ? was.text : "";
+  try {
+    return await offersOnlyIn(provider, state, text);
+  } catch (e) {
+    logs.error(provider, "adding card offers", e);
+    return say(provider.id, state, text, { kind: "stopped", text: "Offers stopped: That did not finish." });
+  }
+}
+async function offersOnlyIn(provider, state, text) {
+  const stop = (why) => ({ kind: "stopped", text: `Offers stopped: ${why}` });
+  tabFor.delete(provider.id);
+  const { tab, ours } = await tabToUse(provider);
+  tabFor.set(provider.id, tab.id);
+  const closeOurs = () => {
+    tabFor.delete(provider.id);
+    return ours ? chrome.tabs.remove(tab.id).catch(() => {}) : null;
+  };
+  await say(provider.id, "working", text, { kind: "adding", text: "Opening card offers…" });
+  let list;
+  try {
+    list = await timed(provider, "list", () => listOnceSignedIn(tab.id, provider, ours, false));
+  } catch (e) {
+    if (!tabGone(e)) throw e;
+    forgetTab(tab.id);
+    return say(provider.id, state, text, stop(`${provider.name}'s tab closed.`));
+  }
+  if (list.state === "timed_out") {
+    await closeOurs();
+    return say(provider.id, state, text, stop("Statement Sweep stopped waiting for you to sign in."));
+  }
+  if (list.state === "skipped") {
+    if (!ours) tabFor.delete(provider.id);
+    return say(provider.id, state, text, stop("Skipped."));
+  }
+  const offered = await offersPass(provider, tab.id, ours, text);
+  await closeOurs();
+  return say(provider.id, state, text, offered);
 }
 
 // Chrome stops an idle background worker after about 30 seconds, and waiting
@@ -1027,6 +1082,56 @@ async function whyChosen(message, off) {
     logs.runLine(`${p.id}: ${why} (${standing}).`);
   }
 }
+
+// Add Offers Now. Heard only from this extension's own pages, for a site
+// whose offers you turned on, and only when no sync is going: one run at a
+// time. The answer says whether it started, and if not, why.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || message.type !== "offersNow") return;
+  const answer = (o) => { try { sendResponse(o); } catch (e) { /* the page closed */ } };
+  const own = chrome.runtime.getURL ? chrome.runtime.getURL("") : "";
+  // Only a page of this extension: a site's tab, where the recipes run, has
+  // the site's address, and a message with no address is not trusted either.
+  const elsewhere = !sender || sender.id !== chrome.runtime.id || !own || !String(sender.url || "").startsWith(own);
+  const provider = providerOf(message.site);
+  if (elsewhere || !provider || !hasOffers(provider)) {
+    answer({ ok: false, why: "That can only be asked from Card Offers." });
+    return;
+  }
+  if (running) {
+    answer({ ok: false, why: "A sync is running. Add Offers Now works once it finishes." });
+    return;
+  }
+  running = true;
+  (async () => {
+    if (!(await offersWanted(provider))) {
+      running = false;
+      answer({ ok: false, why: `Card offers are off for ${provider.name}. Turn on Add When Syncing first.` });
+      return;
+    }
+    answer({ ok: true });
+    const keepAlive = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
+    logs.begin();
+    try {
+      logs.runLine(`Card offers only: ${provider.id}.`);
+      logs.started(provider);
+      note(provider, `Add Offers Now for ${provider.name} begins: offers only, no statements.`);
+      await offersOnly(provider);
+      await logs.ended(provider);
+    } catch (e) {
+      logs.runLine(`The run failed: ${errorText(e)}`, "ERROR");
+    } finally {
+      clearInterval(keepAlive);
+      await logs.finish();
+      running = false;
+      await serially(clearBadge).catch(() => {});
+      await checkDue();
+      chrome.runtime.sendMessage({ type: "board" }).catch(() => {});
+    }
+  })();
+  // The answer may come after a storage read.
+  return true;
+});
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type !== "sweep" || running) return;

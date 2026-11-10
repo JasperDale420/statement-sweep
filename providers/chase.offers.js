@@ -74,6 +74,9 @@
     const heading = Array.from(document.querySelectorAll("h1, h2, h3, [role='heading']")).find((h) => K.shown(h) && cardLabel(h.innerText));
     return heading ? cardLabel(heading.innerText) : "";
   }
+  // The card's product name for the Card Offers page, without its digits. An
+  // employee card's label is a person's name, so it is never kept.
+  const nameOf = (label) => (label && !CARDHOLDER.test(label) ? label.replace(/\s*\(\s*\.{2,}\s*\d{4}\s*\)\s*$/, "").slice(0, 40) : "");
   const lastFour = (label) => (CARD.exec(label) || [])[1] || "";
   const accountId = () => (/[?&;]accountId=(\d+)/.exec(location.hash || location.href) || [])[1] || "";
   const cardKey = (label) => lastFour(label) || (accountId() ? `a${accountId().slice(-4)}` : "card");
@@ -123,7 +126,7 @@
     const lines = K.linesOf(tile, [control.name, merchant]);
     const title = lines.find((l) => /[$%]|\bback\b|\bpoints?\b|\bearn\b|\bspend\b/i.test(l)) || lines[0] || "";
     const own = tile.getAttribute("data-offer-id") || tile.getAttribute("data-offerid") || "";
-    return { id: `${cardKey(card)}:${own || K.wordsId(merchant, title)}`, tile, merchant, title, expires: K.expiresOf(tile.innerText || "") };
+    return { id: `${cardKey(card)}:${own || K.wordsId(merchant, title)}`, tile, merchant, title, expires: K.expiresOf(K.linesOf(tile).join("\n")) };
   }
 
   function offersOnPage(card) {
@@ -200,7 +203,7 @@
     if (cards && !card) return { state: "stopped", why: "The card on show could not be read, so whether it is personal or business is not known, and no offer was added." };
     if (!inScope(card, cards)) return { state: "ok", card: cardKey(card), offers: [], ...(box ? { more: true } : {}), passed: true };
     // Each offer carries its kind, checked again on the card on show before the press.
-    const result = { state: "ok", card: cardKey(card), offers: offersOnPage(card).map((o) => (cards ? { ...o, kind: cards } : o)) };
+    const result = { state: "ok", card: cardKey(card), ...(nameOf(card) ? { cardName: nameOf(card) } : {}), offers: offersOnPage(card).map((o) => (cards ? { ...o, kind: cards } : o)) };
     if (box) result.more = true;
     return result;
   }

@@ -1,6 +1,7 @@
 import { PROVIDERS } from "./providers/index.js";
 import { askFor, getFolder } from "./folders.js";
 import { gapKey, gapWords, keysFor, localIso, needsRun, rankOf, recordOf, siteStatus, stateOf, statusWords } from "./cadence.js";
+import { OFFERS_ON, detailsKey, hasOffers, liveDetails, offerCounts } from "./offers.js";
 
 const go = document.getElementById("go");
 const scroll = document.getElementById("scroll");
@@ -14,6 +15,8 @@ const GLYPHS = {
   bad: '<circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v3.75M8 11h.01"/>',
   ok: '<circle cx="8" cy="8" r="6.25"/><path d="M5.25 8.25 7.25 10.25 10.75 6"/>',
   run: '<path d="M5.5 3.75v8.5l6.75-4.25z"/>',
+  tag: '<path d="M2.5 6.5V3.5h3l7 7-3 3-7-7z"/><circle cx="5" cy="6" r=".8"/>',
+  need: '<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 10.8v.2"/>',
 };
 
 function glyph(kind) {
@@ -49,6 +52,10 @@ const count = (rows, pattern) => rows.reduce((sum, r) => sum + Number((pattern.e
 
 // Where each site stands, from the dates of what it has saved (cadence.js).
 let standing = {};
+// Card offers: the sites they are on for, and what each site's cards showed
+// on the last run (offers.js). Only for sites that have offers.
+let offersOn = [];
+let offerDetails = {};
 let today = localIso();
 
 // The sites that need updating, as PaperPull's Get new for all chooses them:
@@ -207,14 +214,63 @@ function row(provider, status, off, busy, board, skipped) {
     text.textContent = status.text;
     li.append(text);
   }
+  // What the card offers did, on a line of its own, so a stop there is
+  // orange while the site's statements stay as they are.
+  if (status && status.offers && status.offers.text) {
+    const line = document.createElement("div");
+    line.className = "offers-line";
+    line.dataset.kind = status.offers.kind || "done";
+    line.textContent = status.offers.text;
+    li.append(line);
+  }
+  if (hasOffers(provider)) li.append(offersPill(provider));
   return li;
+}
+
+// A link to the Card Offers page, on this site, saying where its offers stand.
+function offersPill(provider) {
+  const a = document.createElement("a");
+  a.className = "pill";
+  a.href = `offers.html#${provider.id}`;
+  a.target = "_blank";
+  a.dataset.focus = `offers:${provider.id}`;
+  const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  let kind, icon = "tag", words;
+  if (!offersOn.includes(provider.id)) {
+    [kind, icon, words] = ["off", "", "Turn on card offers…"];
+  } else {
+    const n = offerCounts(offerDetails[provider.id], today);
+    if (n.needs) [kind, icon, words] = ["need", "need", `${plural(n.needs, "offer")} need${n.needs === 1 ? "s" : ""} you`];
+    else if (n.addedToday && n.waiting) [kind, words] = ["on", `${plural(n.addedToday, "offer")} added today · ${n.waiting} waiting`];
+    else if (n.addedToday) [kind, words] = ["on", `${plural(n.addedToday, "offer")} added today`];
+    else if (n.waiting) [kind, words] = ["on", `${plural(n.waiting, "offer")} waiting`];
+    else if (n.cards) [kind, words] = ["on", "Card offers all added"];
+    else [kind, words] = ["on", "Card offers on"];
+  }
+  a.dataset.kind = kind;
+  a.setAttribute("aria-label", `${words.replace(/…$/, "")}, ${provider.name}. Opens Card Offers.`);
+  if (icon) a.append(glyph(icon));
+  a.append(words);
+  return a;
+}
+
+function drawFooter() {
+  const sites = PROVIDERS.filter(hasOffers);
+  const foot = document.getElementById("offersFoot");
+  foot.hidden = !sites.length;
+  const on = sites.filter((p) => offersOn.includes(p.id)).length;
+  document.getElementById("offersOnCount").textContent = on ? `Card offers on for ${on} ${on === 1 ? "site" : "sites"}` : "Card offers are off";
 }
 
 async function draw() {
   const { board = {} } = await chrome.storage.session.get("board");
-  const stored = await chrome.storage.local.get(["off", ...PROVIDERS.flatMap((p) => keysFor(p.id))]);
+  const offerSites = PROVIDERS.filter(hasOffers);
+  const stored = await chrome.storage.local.get(["off", ...PROVIDERS.flatMap((p) => keysFor(p.id)), OFFERS_ON, ...offerSites.map((p) => detailsKey(p.id))]);
   const off = stored.off || [];
   today = localIso();
+  offersOn = Array.isArray(stored[OFFERS_ON]) ? stored[OFFERS_ON] : [];
+  offerDetails = Object.fromEntries(offerSites.map((p) => [p.id, liveDetails(stored[detailsKey(p.id)], today)]));
+  drawFooter();
   standing = Object.fromEntries(PROVIDERS.map((p) => [p.id, siteStatus(recordOf(stored, p.id), today)]));
   const busy = busyIn(board);
   const hasResults = Object.keys(board).length > 0;

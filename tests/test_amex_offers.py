@@ -253,3 +253,16 @@ def test_a_page_asking_for_a_pause_stops_the_offers_without_a_press(tab):
     got = add(tab, offer)
     assert got["ok"] is False and got["stop"] is True and "pause" in got["why"]
     assert tab.evaluate("pressed") == []
+
+
+def test_the_cards_own_name_is_read_from_the_switcher_for_the_card_offers_page(tab):
+    load(tab, OFFERS, page(tile("Example Coffee", "Earn $5 back")))
+    got = read(tab)
+    # From the switcher box it already reads the card's digits from; nothing is pressed for it.
+    assert got["cardName"] == "Invented Card" and got["card"] == "11111"
+    assert tab.evaluate("window.pressed") == []
+
+
+def test_without_a_switcher_there_is_no_card_name(tab):
+    load(tab, OFFERS, page(tile("Example Coffee", "Earn $5 back"), cards=""))
+    assert "cardName" not in read(tab)

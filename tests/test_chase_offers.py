@@ -271,3 +271,18 @@ def test_a_page_asking_for_a_pause_stops_the_offers_without_a_press(tab):
     got = add(tab, offer)
     assert got["ok"] is False and got["stop"] is True
     assert tab.evaluate("pressed") == []
+
+
+def test_days_left_are_read_as_an_end_date_counted_from_today(tab):
+    load(tab, HUB, page(tile("Example Grocer", "10% cash back")))
+    got = read(tab)
+    want = tab.evaluate("(() => { const d = new Date(); d.setDate(d.getDate() + 12); return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'); })()")
+    assert got["offers"][0]["expires"] == want
+
+
+def test_the_cards_product_name_is_read_but_never_a_cardholders(tab):
+    load(tab, HUB, page(tile("Example Grocer", "10% cash back")))
+    assert read(tab)["cardName"] == "SAPPHIRE PREFERRED"
+    load(tab, HUB, page(tile("Example Grocer", "10% cash back"), card="J. INVENTED (...4321)"))
+    got = read(tab, cards="business")
+    assert got["state"] == "ok" and got["card"] == "4321" and "cardName" not in got

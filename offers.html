@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Card Offers</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="ui.css">
+<style>
+  html { background: var(--window); }
+  body { margin: 0; }
+  a { color: var(--accent-ink); text-decoration: none; border-radius: 4px; }
+  a:hover { text-decoration: underline; }
+  [hidden] { display: none !important; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 64px; display: flex; flex-direction: column; gap: 20px; }
+  .top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .top > div { display: flex; flex-direction: column; gap: 2px; }
+  h1 { margin: 0; font-size: 22px; line-height: 28px; font-weight: 700; }
+  .lead { margin: 0; color: var(--secondary); max-width: 560px; text-wrap: pretty; }
+  .top a { font-weight: 500; }
+  [role=tablist] { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px; width: fit-content; max-width: 100%; border-radius: 8px; background: var(--hover); }
+  [role=tab] { min-height: 28px; padding: 0 14px; border: 0; border-radius: 6px; background: transparent; font-size: 13px; line-height: 18px; transition: background-color 150ms ease-out; }
+  [role=tab]:hover { background: var(--hover); }
+  [role=tab][aria-selected=true] { background: light-dark(#fff, #636366); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+  .site { border-radius: var(--radius); background: var(--group); box-shadow: 0 0 0 .5px var(--separator); }
+  .head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 14px 16px; border-bottom: 1px solid var(--separator); }
+  .head > div { flex: 1 1 260px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  h2 { margin: 0; font-size: 15px; line-height: 20px; font-weight: 600; }
+  .small { margin: 0; color: var(--secondary); font-size: 12px; line-height: 16px; text-wrap: pretty; }
+  .switch { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .switch input { width: 14px; height: 14px; margin: 0; }
+  #now:empty { display: none; }
+  #now { flex-basis: 100%; margin: 0; color: var(--green); font-size: 12px; line-height: 16px; font-weight: 500; }
+  #now[data-kind=no] { color: var(--orange); }
+  #cards { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--separator); }
+  #cards button { display: flex; flex-direction: column; align-items: flex-start; min-height: 44px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--separator-strong); background: var(--group); text-align: left; transition: background-color 150ms ease-out; }
+  #cards button:hover { background: var(--hover); }
+  #cards button[aria-pressed=true] { border: 1.5px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--group)); }
+  #cards button span:first-child { font-weight: 500; }
+  #cards button span + span { color: var(--secondary); font-size: 12px; }
+  .part { padding: 14px 16px 4px; }
+  .part:last-of-type { padding-bottom: 16px; }
+  h3 { margin: 0 0 6px; color: var(--secondary); font-size: 11px; line-height: 14px; font-weight: 600; text-transform: uppercase; }
+  .needs h3 { color: var(--orange); }
+  ul { list-style: none; margin: 0; padding: 0; border-radius: 8px; box-shadow: 0 0 0 .5px var(--separator); }
+  .needs ul { background: var(--orange-tint); box-shadow: 0 0 0 .5px var(--orange-line); }
+  li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 10px 12px; }
+  li + li { border-top: 1px solid var(--separator); }
+  .needs li + li { border-top-color: var(--orange-line); }
+  li > div { flex: 1 1 260px; min-width: 0; }
+  .merchant { font-weight: 500; overflow-wrap: anywhere; }
+  .title { color: var(--secondary); font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
+  .needs .title { color: var(--ink); }
+  .meta { color: var(--secondary); font-size: 12px; }
+  .meta[data-soon] { color: var(--orange); font-weight: 500; }
+  li a { font-size: 12px; font-weight: 500; }
+  li svg { flex: none; width: 16px; height: 16px; color: var(--green); stroke-width: 1.6; }
+  .empty .merchant { color: var(--ink); }
+  #waitingNote { margin: 6px 2px 0; }
+  .foot { margin: 0; color: var(--secondary); font-size: 12px; line-height: 16px; text-wrap: pretty; }
+  #none { padding: 24px 16px; }
+  #none p { margin: 0; }
+  #none p + p { margin-top: 2px; color: var(--secondary); font-size: 12px; line-height: 16px; }
+</style></head>
+<body>
+<main>
+  <div class="top">
+    <div>
+      <h1>Card Offers</h1>
+      <p class="lead">Offers Statement Sweep has seen on your cards, and what it added. It presses only an offer's own add button, never buys, applies or accepts terms.</p>
+    </div>
+    <a href="options.html#offersHead" id="settingsLink">Card Offers Settings</a>
+  </div>
+
+  <div role="tablist" aria-label="Site" id="sites"></div>
+
+  <section class="site" id="site" role="tabpanel">
+    <div class="head">
+      <div>
+        <h2 id="siteName"></h2>
+        <p class="small" id="siteStatus"></p>
+      </div>
+      <label class="switch"><input type="checkbox" id="siteOn"> Add when syncing</label>
+      <button class="primary" type="button" id="addNow">Add Offers Now</button>
+      <p id="now" role="status"></p>
+    </div>
+    <div id="none" hidden>
+      <p id="noneHead">No offers seen yet</p>
+      <p id="noneText"></p>
+    </div>
+    <div id="cards" role="group" aria-label="Card"></div>
+    <div class="part needs" id="needsPart">
+      <h3 id="needsHead"></h3>
+      <ul id="needs" aria-labelledby="needsHead"></ul>
+    </div>
+    <div class="part" id="waitingPart">
+      <h3 id="waitingHead"></h3>
+      <ul id="waiting" aria-labelledby="waitingHead"></ul>
+      <p class="small" id="waitingNote"></p>
+    </div>
+    <div class="part" id="addedPart">
+      <h3 id="addedHead"></h3>
+      <ul id="added" aria-labelledby="addedHead"></ul>
+    </div>
+  </section>
+
+  <p class="foot">This list stays in Chrome on this computer. Expired offers drop off by themselves. Offers are what each site shows you; Statement Sweep does not choose them.</p>
+</main>
+<script src="offers-page.js" type="module"></script>
+</body></html>

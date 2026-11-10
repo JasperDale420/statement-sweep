@@ -91,7 +91,8 @@ def test_turned_on_they_are_added_after_the_statements_and_kept(browser):
     got, site = sweep(browser, plan={"read": {"state": "ok", "card": "1111", "offers": [offer(1), offer(2), offer(3, added=True)]}})
     assert got["calls"][0] == ["read", {"walk": True, "cards": "personal"}]
     assert adds(got) == ["1111:o1", "1111:o2"]
-    assert (got["board"]["fake"]["state"], got["board"]["fake"]["text"]) == ("ok", "1 new. Added 2 offers · 1 already on your card.")
+    assert (got["board"]["fake"]["state"], got["board"]["fake"]["text"]) == ("ok", "1 new.")
+    assert got["board"]["fake"]["offers"] == {"kind": "done", "text": "Added 2 offers · 1 already on your card."}
     assert got["local"]["offers:fake"] == {"added": ["1111:o1", "1111:o2"], "seen": ["1111:o3"], "left": []}
     assert "fake: Offers: 2 added, 0 left, 0 not added." in site
     assert "Invented Shop" not in site
@@ -108,7 +109,8 @@ def test_an_offer_in_the_record_is_never_pressed_again(browser):
 def test_a_sign_out_on_the_offers_page_is_a_note_and_the_site_is_still_done(browser):
     got, _ = sweep(browser, plan={"read": {"state": "signed_out"}})
     assert adds(got) == []
-    assert (got["board"]["fake"]["state"], got["board"]["fake"]["text"]) == ("ok", "1 new. Offers stopped: Fake & Bank signed you out.")
+    assert (got["board"]["fake"]["state"], got["board"]["fake"]["text"]) == ("ok", "1 new.")
+    assert got["board"]["fake"]["offers"] == {"kind": "stopped", "text": "Offers stopped: Fake & Bank signed you out."}
 
 
 def test_a_check_while_adding_stops_the_offers_and_the_site_is_still_done(browser):
@@ -116,20 +118,23 @@ def test_a_check_while_adding_stops_the_offers_and_the_site_is_still_done(browse
     got, _ = sweep(browser, plan=plan)
     assert adds(got) == ["1111:o1"]
     assert got["board"]["fake"]["state"] == "ok"
-    assert got["board"]["fake"]["text"] == "1 new. Offers stopped: Fake & Bank asked you to confirm something."
+    assert got["board"]["fake"]["text"] == "1 new."
+    assert got["board"]["fake"]["offers"] == {"kind": "stopped", "text": "Offers stopped: Fake & Bank asked you to confirm it is you."}
 
 
 def test_an_add_that_breaks_is_a_note_and_the_site_is_still_done(browser):
     got, _ = sweep(browser, plan={"read": {"state": "ok", "card": "1111", "offers": [offer(1)]}, "throws": True})
     assert adds(got) == ["1111:o1"]
     assert got["board"]["fake"]["state"] == "ok"
-    assert got["board"]["fake"]["text"] == "1 new. No new offers. 1 offer did not add and is tried again next time."
+    assert got["board"]["fake"]["text"] == "1 new."
+    assert got["board"]["fake"]["offers"]["text"] == "No new offers. 1 offer did not add and is tried again next time."
 
 
 def test_offers_that_break_outright_are_a_note_and_the_site_is_still_done(browser):
     got, site = sweep(browser, plan={"closes": True})
     assert adds(got) == []
-    assert (got["board"]["fake"]["state"], got["board"]["fake"]["text"]) == ("ok", "1 new. Offers stopped: Fake & Bank's tab closed.")
+    assert (got["board"]["fake"]["state"], got["board"]["fake"]["text"]) == ("ok", "1 new.")
+    assert got["board"]["fake"]["offers"] == {"kind": "stopped", "text": "Offers stopped: Fake & Bank's tab closed."}
     assert "ERROR  fake: " in site and "fake: Offers: 0 added" in site
 
 
@@ -137,4 +142,5 @@ def test_with_a_statement_that_did_not_save_offers_wait_and_the_line_is_the_stat
     got, _ = sweep(browser, fail_second=True, plan={"read": {"state": "ok", "card": "1111", "offers": [offer(1)]}})
     assert got["calls"] == []
     assert got["board"]["fake"]["state"] == "ok"
-    assert got["board"]["fake"]["text"] == "1 new. 1 other did not save and is tried again next time. Invented failure. Card offers wait until every statement here has saved."
+    assert got["board"]["fake"]["text"] == "1 new. 1 other did not save and is tried again next time. Invented failure."
+    assert got["board"]["fake"]["offers"] == {"kind": "waiting", "text": "Card offers wait until every statement here has saved."}
