@@ -24,6 +24,18 @@
   li.has-show .progress { grid-column: 2 / 6; }
   .progress .bar { flex: 1; }
   .progress span { color: var(--secondary); font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* At rest, the sites up to date fold into one row. */
+  details.fold { border-radius: var(--radius); background: var(--group); box-shadow: 0 0 0 .5px var(--separator); overflow: hidden; }
+  details.fold > summary { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 10px; list-style: none; cursor: default; font-size: 13px; line-height: 18px; }
+  details.fold > summary::-webkit-details-marker { display: none; }
+  details.fold > summary:hover { background: var(--hover); }
+  details.fold > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius); }
+  details.fold > summary .ok { flex: none; width: 16px; height: 16px; color: var(--green); }
+  details.fold > summary .next { margin-left: auto; color: var(--secondary); font-size: 12px; line-height: 16px; white-space: nowrap; }
+  details.fold > summary .chev { flex: none; width: 12px; height: 12px; color: var(--secondary); transition: transform 150ms ease-out; }
+  details.fold[open] > summary .chev { transform: rotate(90deg); }
+  details.fold > ul { border-radius: 0; box-shadow: none; border-top: 1px solid var(--separator); }
+  @media (prefers-reduced-motion: reduce) { details.fold > summary .chev { transition: none; } }
   @keyframes sheen { from { background-position: 0 0; } to { background-position: 17px 0; } }
   @media (prefers-reduced-motion: reduce) { .bar > div { transition: none; } .bar[data-unknown] > div { animation: none; } }
   #scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 12px 14px; scrollbar-width: thin; scrollbar-color: var(--separator-strong) transparent; }

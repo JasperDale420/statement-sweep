@@ -1,6 +1,6 @@
 import { PROVIDERS } from "./providers/index.js";
 import { askFor, getFolder } from "./folders.js";
-import { gapKey, gapWords, keysFor, localIso, needsRun, rankOf, standingOf, stateOf, statusWords } from "./cadence.js";
+import { gapKey, gapWords, keysFor, localIso, needsRun, rankOf, shortDate, standingOf, stateOf, statusWords } from "./cadence.js";
 import { OFFERS_ON, detailsKey, hasOffers, liveDetails, offerCounts } from "./offers.js";
 import { countWords, percent, runProgress } from "./progress.js";
 
@@ -8,8 +8,6 @@ const go = document.getElementById("go");
 const scroll = document.getElementById("scroll");
 const summary = document.getElementById("summary");
 
-// Most urgent first, so what needs you is never below the fold.
-const SECTIONS = [["needs_you", "Needs You"], ["working", "In Progress"], ["bad", "Stopped"], ["ok", "Done"], ["", "Sites"]];
 const GLYPHS = {
   needs_you: '<path d="M8 2.5 14.25 13.25H1.75Z"/><path d="M8 6.5v3.25M8 11.5h.01"/>',
   working: '<path d="M8 1.75a6.25 6.25 0 1 0 6.25 6.25"/>',
@@ -18,6 +16,7 @@ const GLYPHS = {
   run: '<path d="M5.5 3.75v8.5l6.75-4.25z"/>',
   tag: '<path d="M2.5 6.5V3.5h3l7 7-3 3-7-7z"/><circle cx="5" cy="6" r=".8"/>',
   need: '<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 10.8v.2"/>',
+  chev: '<path d="M6 4l4 4-4 4"/>',
 };
 
 function glyph(kind) {
@@ -131,7 +130,9 @@ function drawHeader(board, off) {
   allbar.hidden = !busy;
   if (busy) paintBar(allbar, all, stopping ? "bad" : "");
   // While it goes, the one button stops it.
-  go.textContent = busy ? (stopping ? "Stopping…" : "Stop") : "Get New Documents";
+  // At rest it says how many sites it will run.
+  const ticked = pickedOf(off).length;
+  go.textContent = busy ? (stopping ? "Stopping…" : "Stop") : ticked ? `Get New Documents · ${ticked} ${ticked === 1 ? "site" : "sites"}` : "Get New Documents";
   go.classList.toggle("primary", !busy);
   go.classList.toggle("secondary", busy);
   go.disabled = busy ? stopping : !pickedOf(off).length;
@@ -209,13 +210,22 @@ function row(provider, status, off, busy, board, skipped) {
     show.addEventListener("click", () => showTab(status.tab));
     li.append(show);
   }
-  // Where the site stands by its own history, in words, under its name.
+  // One line under its name. While it runs, or when it stopped: what it is
+  // doing, or why. Once it is done: what it saved, then where it now stands.
+  // Otherwise: where it stands by its own history.
   const standingOf = standing[provider.id];
-  if (standingOf) {
+  const ran = status && status.text;
+  if (ran && status.state !== "ok") {
+    const text = document.createElement("div");
+    text.className = "say";
+    text.textContent = status.text;
+    li.append(text);
+  } else if (standingOf) {
     const when = document.createElement("div");
     when.className = "when";
     when.dataset.need = stateOf(standingOf);
-    when.textContent = statusWords(standingOf, today, { skipped });
+    const words = statusWords(standingOf, today, { skipped });
+    when.textContent = ran ? [status.text.trim().replace(/\.$/, ""), words].filter(Boolean).join(" · ") : words;
     // A possible gap you know is expected can be dismissed: that window is not
     // shown or counted again. A gap somewhere new still is.
     if (standingOf.gaps.length) {
@@ -238,12 +248,6 @@ function row(provider, status, off, busy, board, skipped) {
       when.append(" ", dismiss);
     }
     li.append(when);
-  }
-  if (status && status.text) {
-    const text = document.createElement("div");
-    text.className = "say";
-    text.textContent = status.text;
-    li.append(text);
   }
   // Its bar, while it works or waits for you, and where a stopped one got to.
   // A site that finished has its check instead.
@@ -304,6 +308,74 @@ function offersPill(provider) {
   return a;
 }
 
+// At rest: the sites that need a look, most in need first, then every other
+// site folded into one row that says how many and when the next is due.
+// A site needs a look when it may have something new, when its last run
+// stopped or waits for you, or when one of its card offers needs you.
+let foldOpen = false;
+function needsLook(p, board, off) {
+  if (off.includes(p.id)) return false;
+  const state = board[p.id] ? board[p.id].state : "";
+  if (state === "bad" || state === "needs_you") return true;
+  if (needsRun(standing[p.id])) return true;
+  return hasOffers(p) && offersOn.includes(p.id) && offerCounts(offerDetails[p.id], today).needs > 0;
+}
+function atRest(board, off, byNeed, skipped) {
+  const look = PROVIDERS.filter((p) => needsLook(p, board, off)).sort(byNeed);
+  const rest = PROVIDERS.filter((p) => !needsLook(p, board, off)).sort(byNeed);
+  const out = [];
+  if (look.length) {
+    const section = document.createElement("section");
+    section.dataset.state = "look";
+    const heading = document.createElement("h2");
+    heading.id = "heading-look";
+    heading.textContent = "Needs a Look";
+    const list = document.createElement("ul");
+    list.setAttribute("aria-labelledby", heading.id);
+    list.append(...look.map((p) => row(p, board[p.id], off, false, board, skipped(p))));
+    section.append(heading, list);
+    out.push(section);
+  }
+  if (rest.length) {
+    const section = document.createElement("section");
+    section.dataset.state = "rest";
+    const fold = document.createElement("details");
+    fold.className = "fold";
+    // Open when nothing needs a look, so the popup is never empty; otherwise
+    // as you left it while the popup is open.
+    fold.open = foldOpen || !look.length;
+    fold.addEventListener("toggle", () => { foldOpen = fold.open; });
+    const head = document.createElement("summary");
+    head.dataset.focus = "fold";
+    const ok = glyph("ok");
+    ok.classList.add("ok");
+    const on = rest.filter((p) => !off.includes(p.id)).length;
+    const words = document.createElement("span");
+    const plural = (n) => `${n} ${n === 1 ? "site" : "sites"}`;
+    const offCount = rest.length - on;
+    words.textContent = !offCount ? `${plural(on)} up to date`
+      : !on ? `${plural(offCount)} switched off`
+      : `${on} up to date · ${offCount} switched off`;
+    // The soonest any of them is next expected or checked again.
+    const next = rest.filter((p) => !off.includes(p.id))
+      .map((p) => standing[p.id].nextCheck || standing[p.id].expected)
+      .filter((d) => d && d >= today).sort()[0];
+    const when = document.createElement("span");
+    when.className = "next";
+    when.textContent = next ? `Next due ${shortDate(next, today)}` : "";
+    const chev = glyph("chev");
+    chev.classList.add("chev");
+    head.append(ok, words, when, chev);
+    const list = document.createElement("ul");
+    list.setAttribute("aria-label", "Sites up to date");
+    list.append(...rest.map((p) => row(p, board[p.id], off, false, board, skipped(p))));
+    fold.append(head, list);
+    section.append(fold);
+    out.push(section);
+  }
+  return out;
+}
+
 function drawFooter() {
   const sites = PROVIDERS.filter(hasOffers);
   const foot = document.getElementById("offersFoot");
@@ -339,12 +411,17 @@ async function draw() {
   // A redraw must not take the keyboard or the scroll position away from you.
   const kept = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.focus : "";
   const top = scroll.scrollTop;
+  // After a run, a ticked site that was left out for being up to date says so.
+  const skipped = (p) => hasResults && !board[p.id] && !off.includes(p.id) && !needsRun(standing[p.id]);
+  const stateOf_ = (p) => (board[p.id] ? board[p.id].state : "");
+  if (!busy) {
+    scroll.replaceChildren(...atRest(board, off, byNeed, skipped));
+  } else {
   // While a sync goes, its sites stay in one list in one order, so the row
   // you are watching does not move as it works and finishes. Only a site
   // that needs you moves, to the top, so it is never below the fold.
-  const stateOf_ = (p) => (board[p.id] ? board[p.id].state : "");
-  const groupOf = (p) => (!busy ? stateOf_(p) : stateOf_(p) === "needs_you" ? "needs_you" : inRun(board, p.id) ? "run" : "");
-  const sections = busy ? [["needs_you", "Needs You"], ["run", "This Sync"], ["", "Not in This Sync"]] : SECTIONS;
+  const groupOf = (p) => (stateOf_(p) === "needs_you" ? "needs_you" : inRun(board, p.id) ? "run" : "");
+  const sections = [["needs_you", "Needs You"], ["run", "This Sync"], ["", "Not in This Sync"]];
   scroll.replaceChildren(...sections.flatMap(([state, title]) => {
     // A site's need changes as it saves, so the run's list keeps the site list's own order.
     const members = PROVIDERS.filter((p) => groupOf(p) === state).sort(state === "run" ? () => 0 : byNeed);
@@ -353,15 +430,14 @@ async function draw() {
     section.dataset.state = state;
     const heading = document.createElement("h2");
     heading.id = `heading-${state || "sites"}`;
-    heading.textContent = state === "" && hasResults && !busy ? "Not Run Yet" : title;
+    heading.textContent = title;
     const list = document.createElement("ul");
     list.setAttribute("aria-labelledby", heading.id);
-    // After a run, a ticked site that was left out for being up to date says so.
-    const skipped = (p) => hasResults && !board[p.id] && !off.includes(p.id) && !needsRun(standing[p.id]);
     list.append(...members.map((p) => row(p, board[p.id], off, busy, board, skipped(p))));
     section.append(heading, list);
     return [section];
   }));
+  }
   scroll.scrollTop = top;
   if (kept) {
     const again = scroll.querySelector(`[data-focus="${CSS.escape(kept)}"]`);

@@ -109,11 +109,20 @@ def test_the_offers_line_is_its_own_and_only_it_turns_orange(tab):
     # sites stay in the sync's one list, and none is among the stopped.)
     assert "Chase" in base.names_under(tab, "run") and tab.locator("section[data-state=bad]").count() == 0
     assert tab.locator("li:has(button[aria-label='Run Chase']) .state").get_attribute("data-state") == "ok"
-    assert tab.locator("li:has(button[aria-label='Run Chase']) .say").inner_text() == "1 new."
+    # Done: what it saved, then where it stands, on the site's one line.
+    assert tab.locator("li:has(button[aria-label='Run Chase']) .when").inner_text() == "1 new · Nothing saved yet"
     # Orange, light-dark(#b34700, ...) in ui.css, while the statements' words stay grey.
     assert chase.evaluate("(el) => getComputedStyle(el).color") == "rgb(179, 71, 0)"
-    assert tab.locator("li:has(button[aria-label='Run Chase']) .say").evaluate("(el) => getComputedStyle(el).color") != "rgb(179, 71, 0)"
+    assert tab.locator("li:has(button[aria-label='Run Chase']) .when").evaluate("(el) => getComputedStyle(el).color") != "rgb(179, 71, 0)"
     amex = tab.locator("li:has(button[aria-label='Run American Express']) .offers-line")
     assert amex.inner_text() == "Adding offers · 4 of 10 on Card ·· 1004" and amex.get_attribute("data-kind") == "adding"
     wait = tab.locator("li:has(button[aria-label='Run Chase Business']) .offers-line")
     assert wait.get_attribute("data-kind") == "waiting"
+
+
+def test_an_up_to_date_site_whose_offers_need_you_needs_a_look(tab):
+    from datetime import date
+    everything = base.history(**{p: base.monthly(p, date(2026, 11, 1)) for p in base.SITES})
+    base.show(tab, local={**everything, "offersOn": ["chase"], "offerDetails:chase": details(NEEDS)}, today=f"{TODAY}T12:00:00")
+    assert base.names_under(tab, "look") == ["Chase"]
+    assert "Chase" not in base.names_under(tab, "rest")
