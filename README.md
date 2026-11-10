@@ -36,7 +36,7 @@ nothing anywhere.
 
 ## Sites
 
-25 sites are switched on. Each is a recipe in `providers/`, tested in a real
+26 sites are switched on. Each is a recipe in `providers/`, tested in a real
 Chromium against stand-in pages.
 
 | Kind | Sites |
@@ -47,6 +47,7 @@ Chromium against stand-in pages.
 | Payments | PayPal, Venmo |
 | Bills and loans | Nelnet, SDG&E, Spectrum |
 | Insurance and government | State Farm, IRS, Shelby County Trustee |
+| Payroll | TriNet |
 | Receipts | Apple |
 
 Sites change their pages without notice, so a recipe can break. If one
