@@ -308,7 +308,7 @@ def test_a_recipes_lines_wait_in_the_page_and_ride_on_the_next_answer(tab):
 
 # -- the engine ---------------------------------------------------------------
 
-# Not x.test: the engine reads "*." in a match as x., so that host stands for none.
+# A host of its own, apart from the test page's, which its stand-in recipe never reads.
 PROVIDER = {"id": "fake", "name": "Fake & Bank", "match": ["https://bank.test/*"], "listUrl": "https://bank.test/docs",
             "pageFile": "providers/fake.page.js", "fileName": "{date} Fake {title}.pdf", "family": "fetch"}
 INDEX = "export const PROVIDERS = " + json.dumps([PROVIDER]) + ";\n"

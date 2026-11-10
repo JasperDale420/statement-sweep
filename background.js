@@ -196,7 +196,7 @@ function onHost(url, provider) {
   let host;
   try { host = new URL(url).hostname; } catch (e) { return false; }
   return provider.match.some((m) => {
-    const wanted = new URL(m.replace("*.", "x.").replace(/\*$/, "")).hostname.replace(/^x\./, "");
+    const wanted = new URL(m.replace("*.", "").replace(/\*$/, "")).hostname;
     return m.includes("*.") ? host === wanted || host.endsWith("." + wanted) : host === wanted;
   });
 }
@@ -1084,7 +1084,7 @@ serially(async () => {
 // a group run one after another, in the list's order.
 function hostsOf(provider) {
   return provider.match.map((m) => ({
-    host: new URL(m.replace("*.", "x.").replace(/\*$/, "")).hostname.replace(/^x\./, ""),
+    host: new URL(m.replace("*.", "").replace(/\*$/, "")).hostname,
     wild: m.includes("*."),
   }));
 }
