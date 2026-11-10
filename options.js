@@ -1,5 +1,6 @@
 import { PROVIDERS } from "./providers/index.js";
 import { DEFAULT_NAMING, checkPattern, normalise, pathFor } from "./naming.js";
+import { INBOX, forgetFolders, getFolder, setFolder, withinChosen } from "./folders.js";
 
 const $ = (id) => document.getElementById(id);
 const SAMPLE = { id: "sample", date: "2026-10-28", title: "Monthly Statement" };
@@ -11,6 +12,8 @@ let lastPattern = "file";
 
 let draft = normalise((await chrome.storage.local.get("naming")).naming);
 let dirty = false;
+let destination = await getFolder("destination");
+let inbox = await getFolder("inbox");
 
 const scope = () => $("scope").value;
 const inherit = () => normalise(draft);
@@ -45,8 +48,74 @@ function drawPreview() {
   $("save").disabled = Boolean(problem);
   const provider = PROVIDERS.find((p) => p.id === scope()) || PROVIDERS.find((p) => p.id === "amex") || PROVIDERS[0];
   $("previewhead").textContent = `Example for ${provider.name}`;
-  $("preview").textContent = problem ? "" : pathFor(inherit(), provider, SAMPLE);
+  const path = problem ? "" : pathFor(inherit(), provider, SAMPLE);
+  $("preview").textContent = path && destination ? `${destination.name}/${withinChosen(destination.name, path)}` : path;
 }
+
+function drawLocation() {
+  $("destName").textContent = destination ? destination.name : "Downloads Folder";
+  $("useDownloads").hidden = !destination;
+  $("chooseDest").textContent = destination ? "Change…" : "Choose Folder…";
+  $("desthint").textContent = destination ? "Only the folder's name is shown here. Your Mac keeps its full location." : "Or choose a folder elsewhere. If Chrome won't allow one, such as Documents itself, press New Folder in its window and choose that.";
+  $("inboxRow").hidden = !destination;
+  $("inboxState").textContent = inbox ? "Allowed" : "Not Allowed Yet";
+  $("allowInbox").textContent = inbox ? "Choose Again…" : "Allow Access…";
+  $("basehint").textContent = destination ? "A folder inside the one you chose. Leave blank to save directly in it." : "Inside Chrome's Downloads folder.";
+}
+
+function locationProblem(text) {
+  $("locationProblem").textContent = text;
+}
+
+// The folder a site's download lands in has to exist before it can be chosen.
+function makeInbox() {
+  return chrome.downloads.download({
+    url: "data:text/plain,Statement%20Sweep%20moves%20documents%20through%20this%20folder.%20It%20is%20safe%20to%20leave%20empty.",
+    filename: `${INBOX}/About this folder.txt`, conflictAction: "overwrite", saveAs: false,
+  });
+}
+
+async function pickFolder(options) {
+  try {
+    return await window.showDirectoryPicker({ mode: "readwrite", ...options });
+  } catch (e) {
+    if (e.name !== "AbortError") locationProblem("Chrome would not open that folder. Please choose another.");
+    return null;
+  }
+}
+
+$("chooseDest").addEventListener("click", async () => {
+  locationProblem("");
+  const handle = await pickFolder({ id: "sweep-destination", startIn: "documents" });
+  if (!handle) return;
+  await setFolder("destination", handle);
+  destination = handle;
+  await makeInbox();
+  drawLocation();
+  drawPreview();
+});
+
+$("allowInbox").addEventListener("click", async () => {
+  locationProblem("");
+  const handle = await pickFolder({ id: "sweep-inbox", startIn: "downloads" });
+  if (!handle) return;
+  if (handle.name !== INBOX) {
+    locationProblem(`Please choose the folder named “${INBOX}” inside Downloads.`);
+    return;
+  }
+  await setFolder("inbox", handle);
+  inbox = handle;
+  drawLocation();
+});
+
+$("useDownloads").addEventListener("click", async () => {
+  locationProblem("");
+  await forgetFolders();
+  destination = null;
+  inbox = null;
+  drawLocation();
+  drawPreview();
+});
 
 // The menu above a pattern shows the preset it matches, or Custom.
 function drawPreset(field) {
@@ -139,4 +208,5 @@ window.addEventListener("beforeunload", (e) => { if (dirty) e.preventDefault(); 
 
 $("scope").replaceChildren(new Option("All Sites", ""), ...PROVIDERS.map((p) => new Option(p.name, p.id)));
 $("base").value = draft.base;
+drawLocation();
 drawFields();

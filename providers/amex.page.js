@@ -15,8 +15,8 @@
   const SWITCHER_WAIT_MS = 5000;
   const EMPTY_WAIT_MS = 3000;
   const WALKING = { state: "walking" };
-  const ACTIVITY_WORDS = /statements?\s*&\s*activity/i;
-  const PDF_WORDS = /go to pdf statements/i;
+  const ACTIVITY_WORDS = /^statements?\s*&\s*activity$/i;
+  const PDF_WORDS = /^go to pdf statements$/i;
   const LOGIN_MARKERS = ["/login", "/logon", "/signin", "/sign-in", "/auth", "myca/logon"];
   const CHECK_URLS = ["/mfa", "/verification", "/challenge"];
   const CHECK_MARKERS = ["enter the code", "verification code", "6-digit", "one-time code", "two-factor", "two-step", "authenticator", "confirm your identity", "verify your identity", "we sent a code", "we'll send", "check your email", "check your phone", "are you a robot", "captcha", "let's confirm it's you", "unusual activity"];
@@ -127,7 +127,7 @@
   const walk = () => (globalThis.__amexWalk = globalThis.__amexWalk || { pressed: new Set(), at: 0 });
   const firstShown = (selector) => Array.from(document.querySelectorAll(selector)).find(shown);
   const linkSaying = (words) => Array.from(document.querySelectorAll("a, [role='link']"))
-    .find((a) => shown(a) && words.test(tidy(`${a.innerText} ${a.getAttribute("aria-label") || ""}`)));
+    .find((a) => shown(a) && [a.innerText, a.getAttribute("aria-label")].some((t) => words.test(tidy(t))));
 
   function press(el, step) {
     const w = walk();
@@ -147,7 +147,8 @@
     if (location.pathname.startsWith("/activity")) {
       if (press(firstShown(PDF_LINKS) || linkSaying(PDF_WORDS), "pdf link")) return WALKING;
     } else if (location.pathname.includes("/overview") && !activity) {
-      if (press(firstShown(OPTION), "card option") || press(firstShown(COMBOBOX), "card switcher")) return WALKING;
+      const option = Array.from(document.querySelectorAll(OPTION)).find((o) => shown(o) && /^\d{4,6}$/.test(digitsOf(o)));
+      if (press(option, "card option") || press(firstShown(COMBOBOX), "card switcher")) return WALKING;
     } else if (press(activity, "activity link")) {
       return WALKING;
     }

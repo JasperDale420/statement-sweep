@@ -185,6 +185,12 @@
     return { moved: true };
   }
 
+  // Only an entry that reads wholly as an account is ever pressed.
+  function isAccountEntry(entry) {
+    const labels = labelsOf(entry);
+    return labels.length > 0 && labels.every((l) => ENTRY.test(l) && !ENTRY_ACTION.test(l));
+  }
+
   // Waits until the account is selected and the old account's rows are gone,
   // so they are never saved under the new account's name.
   async function chooseAccount(entry) {
@@ -221,6 +227,7 @@
       if (w.years.length) return chooseYear(w.years.shift());
     }
     const next = menu().find((a) => shown(a) && !w.done.has(a.id));
+    if (next && !isAccountEntry(next)) return { why: "A menu entry is not one this will press." };
     if (next) return chooseAccount(next);
     const passed = w.passedOver.size;
     const note = passed ? `Passed over ${passed} Chase ${passed === 1 ? "entry that is" : "entries that are"} not a checking, card or debit account.` : "";

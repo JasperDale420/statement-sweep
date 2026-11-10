@@ -125,8 +125,7 @@ export const PROVIDERS = [
     "id": "nelnet",
     "name": "Nelnet",
     "match": [
-      "https://nelnet.studentaid.gov/*",
-      "https://auth.nelnet.studentaid.gov/*"
+      "https://nelnet.studentaid.gov/*"
     ],
     "listUrl": "https://nelnet.studentaid.gov/documents/inbox-statements",
     "pageFile": "providers/nelnet.page.js",
@@ -137,8 +136,7 @@ export const PROVIDERS = [
     "id": "optum",
     "name": "Optum Bank",
     "match": [
-      "https://account.optumbank.com/*",
-      "https://www.optumbank.com/*"
+      "https://account.optumbank.com/*"
     ],
     "listUrl": "https://account.optumbank.com/account/help/forms",
     "pageFile": "providers/optum.page.js",

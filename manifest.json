@@ -1,10 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Statement Sweep",
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
   "description": "Saves your own official statements from sites you are already signed in to. Runs in your browser and sends nothing anywhere.",
   "action": {
     "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png"
+    },
     "default_title": "Statement Sweep"
   },
   "options_ui": {
@@ -26,7 +36,6 @@
     "https://accounts.coinbase.com/*",
     "https://app.alpaca.markets/*",
     "https://apps2.shelbycountytrustee.com/*",
-    "https://auth.nelnet.studentaid.gov/*",
     "https://card.apple.com/*",
     "https://digital.fidelity.com/*",
     "https://digital.firsthorizon.com/*",
@@ -42,7 +51,6 @@
     "https://www.interactivebrokers.co.uk/*",
     "https://www.interactivebrokers.com/*",
     "https://www.interactivebrokers.ie/*",
-    "https://www.optumbank.com/*",
     "https://www.paypal.com/*",
     "https://www.wealthfront.com/*"
   ]

@@ -119,7 +119,9 @@ def test_unticking_every_site_leaves_nothing_to_start(tab):
 def test_run_asks_for_one_site_and_get_new_for_all(tab):
     show(tab)
     tab.click("button[aria-label='Run Chase']")
+    tab.wait_for_function("__sent.length === 1")
     tab.click("#go")
+    tab.wait_for_function("__sent.length === 2")
     sent = tab.evaluate("__sent")
     assert sent[0] == {"type": "sweep", "only": "chase"}
     assert sent[1]["type"] == "sweep" and sent[1].get("only") is None

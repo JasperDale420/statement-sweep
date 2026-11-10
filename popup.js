@@ -1,4 +1,5 @@
 import { PROVIDERS } from "./providers/index.js";
+import { askFor, getFolder } from "./folders.js";
 
 const go = document.getElementById("go");
 const scroll = document.getElementById("scroll");
@@ -22,7 +23,17 @@ function glyph(kind) {
   return svg;
 }
 
-const start = (only) => chrome.runtime.sendMessage({ type: "sweep", only });
+// Access to a chosen folder can lapse when Chrome restarts, and can only be
+// renewed from a press like this one. If it is refused, the sweep says so.
+async function start(only) {
+  for (const name of ["destination", "inbox"]) {
+    try {
+      const handle = await getFolder(name);
+      if (handle) await askFor(handle);
+    } catch (e) { /* the sweep reports a folder it cannot use */ }
+  }
+  chrome.runtime.sendMessage({ type: "sweep", only });
+}
 const busyIn = (board) => Object.values(board).some((s) => s.state === "working" || s.state === "needs_you");
 const count = (rows, pattern) => rows.reduce((sum, r) => sum + Number((pattern.exec(r.text) || [0, 0])[1]), 0);
 

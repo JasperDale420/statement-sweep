@@ -3,6 +3,7 @@
 // browser except the requests the provider's own page would make.
 import { PROVIDERS } from "./providers/index.js";
 import { pathFor } from "./naming.js";
+import { INBOX, getFolder, isGranted, moveFromInbox, withinChosen, writeFile } from "./folders.js";
 
 const SIGN_IN_WAIT_MS = 5 * 60 * 1000;
 const MAX_VIEWS = 300;
@@ -79,10 +80,7 @@ function onHost(url, provider) {
 
 // Whether a recipe may press the site's own links in this tab to reach the
 // documents. `ours` is true for a tab this sweep opened, false for one of yours.
-function mayWalk(ours) {
-  // TODO(human): decide whether a tab you already had open may be walked.
-  return ours;
-}
+const mayWalk = (ours) => ours;
 
 // Waits and looks again while you sign in. It never touches the sign-in itself.
 async function listOnceSignedIn(tabId, provider, ours) {
@@ -155,8 +153,12 @@ const saveBase64 = async (base64, filename) => finished(await chrome.downloads.d
 function nextDownload(provider, filename, nameMustMatch) {
   let settle, timer, id = null;
   const promise = new Promise((resolve) => { settle = resolve; });
+  // A download's address is chosen by whoever starts it, so one that says it
+  // came from another site is not this provider's, whatever it points at.
+  const onProvider = (u) => Boolean(u) && (onHost(u, provider) || (u.startsWith("blob:") && onHost(u.slice(5), provider)));
   const ours = (item) => item.byExtensionId !== chrome.runtime.id
-    && [item.referrer, item.finalUrl, item.url].some((u) => u && (onHost(u, provider) || (u.startsWith("blob:") && onHost(u.slice(5), provider))));
+    && (!item.referrer || onHost(item.referrer, provider))
+    && [item.referrer, item.finalUrl, item.url].some(onProvider);
   const drop = () => {
     clearTimeout(timer);
     chrome.downloads.onDeterminingFilename.removeListener(naming);
@@ -182,7 +184,7 @@ function nextDownload(provider, filename, nameMustMatch) {
     }
     suggest({ filename, conflictAction: "uniquify" });
     drop();
-    finished(id).then((good) => settle({ ok: good }));
+    finished(id).then((good) => settle({ ok: good, id }));
   }
   timer = setTimeout(() => refuse("The download did not start in time."), (provider.downloadWaitSeconds || 45) * 1000);
   chrome.downloads.onDeterminingFilename.addListener(naming);
@@ -192,20 +194,42 @@ function nextDownload(provider, filename, nameMustMatch) {
 async function saveOne(tabId, provider, doc) {
   const { naming } = await chrome.storage.local.get("naming");
   const filename = pathFor(naming, provider, doc);
+  const destination = await getFolder("destination");
   if (doc.method === "fetch") {
     const pdf = await inPage(tabId, provider, fetchPdf, [doc]);
     if (!pdf || !pdf.ok) return { ok: false, why: (pdf && pdf.why) || "The site did not send it." };
+    if (destination) {
+      try {
+        const bytes = Uint8Array.from(atob(pdf.base64), (c) => c.charCodeAt(0));
+        await writeFile(destination, withinChosen(destination.name, filename), new Blob([bytes], { type: "application/pdf" }));
+        return { ok: true };
+      } catch (e) {
+        return { ok: await saveBase64(pdf.base64, filename), note: "Some documents were saved in Downloads because your chosen folder could not be written." };
+      }
+    }
     return { ok: await saveBase64(pdf.base64, filename) };
   }
   if (doc.method === "click") {
-    const landing = nextDownload(provider, filename, doc.nameMustMatch);
+    // A random name, so a move can only ever pick up this one download.
+    const stageName = `${crypto.randomUUID()}.pdf`;
+    const landing = nextDownload(provider, destination ? `${INBOX}/${stageName}` : filename, doc.nameMustMatch);
     let pressed;
     try { pressed = await inPage(tabId, provider, clickDoc, [doc]); } catch (e) { landing.cancel(); throw e; }
     if (!pressed || !pressed.ok) {
       landing.cancel();
       return { ok: false, why: (pressed && pressed.why) || "Its download control was not there." };
     }
-    return landing.promise;
+    const landed = await landing.promise;
+    if (!destination || !landed.ok) return landed;
+    // The original is removed only once the copy is confirmed whole.
+    try {
+      await moveFromInbox(await getFolder("inbox"), stageName, destination, withinChosen(destination.name, filename));
+    } catch (e) {
+      return { ok: true, note: `Some documents stayed in Downloads, in ${INBOX}, because they could not be moved to your chosen folder.` };
+    }
+    await chrome.downloads.removeFile(landed.id).catch(() => {});
+    await chrome.downloads.erase({ id: landed.id }).catch(() => {});
+    return landed;
   }
   return { ok: false, why: "This document has no way to be saved yet." };
 }
@@ -220,6 +244,20 @@ async function tabToUse(provider) {
     } catch (e) { /* not a page this can read */ }
   }
   return { tab: await chrome.tabs.create({ url: provider.listUrl, active: false }), ours: true };
+}
+
+// Why these documents cannot go to your chosen folder right now, if so. Asked
+// before saving, so nothing lands anywhere you did not expect.
+async function folderProblem(docs) {
+  const destination = await getFolder("destination");
+  if (!destination) return "";
+  const allow = "Allow access in Statement Sweep's Settings, then run it again.";
+  if (!(await isGranted(destination))) return `Your chosen folder needs permission again. ${allow}`;
+  if (docs.some((d) => d.method === "click")) {
+    const inbox = await getFolder("inbox");
+    if (!inbox || !(await isGranted(inbox))) return `This site saves through Downloads first. ${allow}`;
+  }
+  return "";
 }
 
 async function sweep(provider) {
@@ -242,6 +280,8 @@ async function sweep(provider) {
     }
 
     const fresh = (list.docs || []).filter((d) => !seen.has(d.id));
+    const problem = fresh.length ? await folderProblem(fresh) : "";
+    if (problem) return say(provider.id, "bad", `${count} saved. ${problem}`);
     // Chrome holds a page's second download for a prompt if you have not pressed
     // anything in that tab, and tells nobody. Allowed only while a sweep runs.
     if (fresh.some((d) => d.method === "click")) {
@@ -254,6 +294,7 @@ async function sweep(provider) {
       seen.add(doc.id);
       await chrome.storage.local.set({ [key]: [...seen] });
       count += 1;
+      if (result.note) notes.push(result.note);
       await timed(provider, "pause", human);
     }
     if (list.state === "stopped") return say(provider.id, "bad", `${count} saved. The page was not what this expected. ${list.why}`);
@@ -274,6 +315,13 @@ async function sweep(provider) {
 // Chrome stops an idle background worker after about 30 seconds, and waiting
 // for a download makes no calls, so a call every 20 seconds keeps a sweep alive.
 // A new worker with a sweep still marked as working means the last one died.
+// A sweep that died leaves its download permission behind, so a worker that
+// starts, and every browser start, removes it.
+const clearDownloadGrant = () => chrome.contentSettings.automaticDownloads.clear({}).catch(() => {});
+clearDownloadGrant();
+chrome.runtime.onStartup.addListener(clearDownloadGrant);
+chrome.runtime.onInstalled.addListener(clearDownloadGrant);
+
 (async () => {
   const { board = {} } = await chrome.storage.session.get("board");
   let stale = false;
@@ -290,11 +338,10 @@ chrome.runtime.onMessage.addListener((message) => {
     const keepAlive = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
     try {
       for (const provider of chosen) {
-        try { await sweep(provider); } catch (e) { await say(provider.id, "bad", `That did not finish. ${e.message}`); }
+        try { await sweep(provider); } catch (e) { await say(provider.id, "bad", `That did not finish. ${e.message}`); } finally { await clearDownloadGrant(); }
       }
     } finally {
       clearInterval(keepAlive);
-      await chrome.contentSettings.automaticDownloads.clear({}).catch(() => {});
       running = false;
       chrome.runtime.sendMessage({ type: "board" }).catch(() => {});
     }

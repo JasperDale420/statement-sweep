@@ -16,7 +16,7 @@ window.__store = {};
 Object.defineProperty(window, 'chrome', {value: {storage: {local: {
   get: async (key) => (key in __store ? {[key]: __store[key]} : {}),
   set: async (obj) => { Object.assign(__store, JSON.parse(JSON.stringify(obj))); },
-}}}});
+}}, downloads: {download: async (o) => { window.__made = o; return 1; }}}});
 """
 
 
@@ -71,6 +71,12 @@ def test_a_value_cannot_make_a_folder_or_break_the_name(tab):
     assert got == 'Statement Sweep/American Express/Fees-Other- -Q3--.pdf'
 
 
+def test_a_sites_own_name_is_cleaned_too(tab):
+    doc = {"id": "x", "date": "2026-10-28", "title": "A\\u0007B " + "x" * 400}
+    name = path(tab, None, doc=doc).split("/")[-1]
+    assert name.endswith(".pdf") and "\\u0007" not in name and len(name) == 124
+
+
 def test_a_pattern_cannot_climb_out_of_downloads(tab):
     got = path(tab, {"base": "../../secret", "folder": "..", "file": "x"})
     assert ".." not in got and got == "secret/x.pdf"
@@ -114,6 +120,135 @@ def settings(tab, stored=None):
     tab.add_init_script("if (sessionStorage.getItem('n') && sessionStorage.getItem('n') !== 'null') window.__store.naming = JSON.parse(sessionStorage.getItem('n'));")
     tab.goto(BASE + "options.html")
     tab.wait_for_selector("#scope option[value=amex]", state="attached")
+
+
+# Writing to a chosen folder, on a real browser folder handle.
+WRITE = """async ([path, text, again]) => {
+  const f = await import('/folders.js');
+  const root = await navigator.storage.getDirectory();
+  for await (const k of root.keys()) await root.removeEntry(k, {recursive: true});
+  const first = await f.writeFile(root, path, new Blob([text]));
+  const second = again ? await f.writeFile(root, path, new Blob([text + text])) : '';
+  const parts = first.split('/'); let dir = root;
+  for (const p of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(p);
+  const read = await (await (await dir.getFileHandle(parts.at(-1))).getFile()).text();
+  return [first, second, read];
+}"""
+
+
+def test_a_file_lands_in_its_folders_whole(tab):
+    tab.goto(BASE)
+    assert tab.evaluate(WRITE, ["Finance/Chase/2026/a.pdf", "%PDF-1", False]) == ["Finance/Chase/2026/a.pdf", "", "%PDF-1"]
+
+
+def test_a_file_never_overwrites_one_already_there(tab):
+    tab.goto(BASE)
+    assert tab.evaluate(WRITE, ["x/a.pdf", "first", True]) == ["x/a.pdf", "x/a (1).pdf", "first"]
+
+
+@pytest.mark.parametrize("chosen,path,expected", [
+    ("statement sweep", "Statement Sweep/Chase/a.pdf", "Chase/a.pdf"),
+    ("Taxes", "Statement Sweep/Chase/a.pdf", "Statement Sweep/Chase/a.pdf"),
+    ("a.pdf", "a.pdf", "a.pdf"),
+])
+def test_a_chosen_folder_with_the_main_folders_name_is_not_doubled(tab, chosen, path, expected):
+    tab.goto(BASE)
+    assert tab.evaluate("async ([c, p]) => (await import('/folders.js')).withinChosen(c, p)", [chosen, path]) == expected
+
+
+def test_the_example_does_not_double_a_folder_named_like_the_main_folder(tab):
+    forget(tab)
+    settings(tab)
+    picks(tab, "Statement Sweep")
+    tab.click("#chooseDest")
+    tab.wait_for_function("document.getElementById('destName').textContent === 'Statement Sweep'")
+    assert tab.inner_text("#preview") == "Statement Sweep/American Express/2026-10-28 American Express Monthly Statement.pdf"
+    forget(tab)
+
+
+def test_a_chosen_folder_is_remembered_and_forgotten(tab):
+    tab.goto(BASE)
+    got = tab.evaluate("""async () => {
+      const f = await import('/folders.js');
+      const root = await navigator.storage.getDirectory();
+      const dir = await root.getDirectoryHandle('kept', {create: true});
+      await f.setFolder('destination', dir);
+      const name = (await f.getFolder('destination')).name;
+      await f.forgetFolders();
+      return [name, await f.getFolder('destination') === undefined];
+    }""")
+    assert got == ["kept", True]
+
+
+def picks(tab, *names):
+    tab.evaluate("""async (names) => {
+      window.__picks = [...names];
+      const root = await navigator.storage.getDirectory();
+      window.showDirectoryPicker = async () => {
+        const next = __picks.shift();
+        if (next === 'cancel') throw new DOMException('no', 'AbortError');
+        return root.getDirectoryHandle(next, {create: true});
+      };
+    }""", list(names))
+
+
+def forget(tab):
+    tab.goto(BASE)
+    tab.evaluate("async () => (await import('/folders.js')).forgetFolders()")
+
+
+def test_with_no_folder_chosen_it_saves_to_downloads(tab):
+    forget(tab)
+    settings(tab)
+    assert tab.inner_text("#destName") == "Downloads Folder"
+    assert tab.locator("#inboxRow").is_hidden() and tab.locator("#useDownloads").is_hidden()
+
+
+def test_choosing_a_folder_shows_it_and_asks_for_downloads_access(tab):
+    forget(tab)
+    settings(tab)
+    picks(tab, "Taxes")
+    tab.click("#chooseDest")
+    tab.wait_for_function("document.getElementById('destName').textContent === 'Taxes'")
+    assert tab.locator("#inboxRow").is_visible() and tab.inner_text("#inboxState") == "Not Allowed Yet"
+    assert tab.inner_text("#preview").startswith("Taxes/Statement Sweep/")
+    assert tab.evaluate("__made.filename") == "Statement Sweep Inbox/About this folder.txt"
+
+
+def test_only_the_inbox_folder_is_accepted_for_downloads_access(tab):
+    forget(tab)
+    settings(tab)
+    picks(tab, "Taxes", "Photos", "Statement Sweep Inbox")
+    tab.click("#chooseDest")
+    tab.wait_for_function("document.getElementById('destName').textContent === 'Taxes'")
+    tab.click("#allowInbox")
+    tab.wait_for_function("document.getElementById('locationProblem').textContent.includes('Statement Sweep Inbox')")
+    assert tab.inner_text("#inboxState") == "Not Allowed Yet"
+    tab.click("#allowInbox")
+    tab.wait_for_function("document.getElementById('inboxState').textContent === 'Allowed'")
+    assert tab.inner_text("#locationProblem") == ""
+
+
+def test_cancelling_the_picker_changes_nothing(tab):
+    forget(tab)
+    settings(tab)
+    picks(tab, "cancel")
+    tab.click("#chooseDest")
+    tab.wait_for_timeout(100)
+    assert tab.inner_text("#destName") == "Downloads Folder" and tab.inner_text("#locationProblem") == ""
+
+
+def test_use_downloads_goes_back(tab):
+    forget(tab)
+    settings(tab)
+    picks(tab, "Taxes")
+    tab.click("#chooseDest")
+    tab.wait_for_function("document.getElementById('destName').textContent === 'Taxes'")
+    tab.click("#useDownloads")
+    tab.wait_for_function("document.getElementById('destName').textContent === 'Downloads Folder'")
+    assert tab.locator("#inboxRow").is_hidden()
+    assert tab.inner_text("#preview").startswith("Statement Sweep/")
+    forget(tab)
 
 
 def test_the_page_opens_on_the_defaults_with_an_example(tab):

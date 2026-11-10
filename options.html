@@ -20,12 +20,17 @@
   input.pattern { font-family: var(--mono); font-size: 12px; }
   input::placeholder { color: var(--secondary); opacity: 1; }
   .hint:empty { display: none; }
+  [hidden] { display: none !important; }
+  .choice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .choice > span { margin-right: auto; font-weight: 500; overflow-wrap: anywhere; }
+  .choice .secondary { min-height: 28px; padding: 0 12px; }
   #insert { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .chip { min-height: 24px; padding: 0 10px; border: 0; border-radius: 12px; background: var(--hover); font-size: 12px; transition: background-color 150ms ease-out; }
   .chip:hover { background: var(--press); }
   #preview { display: block; font: 12px/17px var(--mono); overflow-wrap: anywhere; }
   #problem { margin: 0; color: var(--red); font-weight: 500; }
-  #problem:empty { display: none; }
+  #problem:empty, #locationProblem:empty { display: none; }
+  #locationProblem { margin: 8px 4px 0; color: var(--red); font-weight: 500; }
   .example { display: grid; gap: 4px; padding: 10px 14px; }
   details { margin-top: 12px; }
   summary { padding: 2px 4px; color: var(--accent-ink); cursor: default; width: fit-content; border-radius: 4px; }
@@ -48,11 +53,30 @@
   <h2>Location</h2>
   <div class="group">
     <div class="row">
+      <span>Save To</span>
+      <div class="choice">
+        <span id="destName"></span>
+        <button class="secondary" id="useDownloads" type="button">Use Downloads</button>
+        <button class="secondary" id="chooseDest" type="button">Choose Folder…</button>
+      </div>
+      <p class="hint" id="desthint"></p>
+    </div>
+    <div class="row" id="inboxRow">
+      <span>Downloads Access</span>
+      <div class="choice">
+        <span id="inboxState"></span>
+        <button class="secondary" id="allowInbox" type="button"></button>
+      </div>
+      <p class="hint">Some sites can only save to Downloads, so their files pass through a folder there on the way to yours. Statement Sweep has already made it. Choose “Statement Sweep Inbox” in Downloads when asked.</p>
+    </div>
+    <div class="row">
       <label for="base">Main Folder</label>
       <input id="base" spellcheck="false" autocomplete="off">
-      <p class="hint">Inside Chrome's Downloads folder. To save somewhere else entirely, change the download location in Chrome's settings.</p>
+      <p class="hint" id="basehint"></p>
     </div>
   </div>
+
+  <p id="locationProblem" role="alert"></p>
 
   <h2>Organization</h2>
   <div class="group">

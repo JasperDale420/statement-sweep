@@ -132,6 +132,15 @@ def test_a_walk_reads_every_year_of_every_account_and_passes_over_a_cardholder(t
     assert tab.evaluate("moves") == ["year:2025", "account:B", "open:B", "account:C"]
 
 
+@pytest.mark.parametrize("words", ["Pay bills", "Sign out", "Transfer money (...1234)", "Close account (...1234)"])
+def test_a_menu_entry_that_is_not_an_account_is_never_pressed(tab, words):
+    menu = entry(CHK) + f'<a id="bottom-other" href="#">{words}</a>'
+    load(tab, CENTER, center(check_row(0, "Sep 30, 2026"), menu=menu, years=("2026, current selection",)))
+    assert tab.evaluate("__sweep.readList({ walk: true })")["more"] is True
+    assert "not one this will press" in tab.evaluate("__sweep.nextView()")["why"]
+    assert "bottom-other" not in tab.evaluate("pressed")
+
+
 def test_rows_that_never_change_to_the_chosen_year_stop_the_walk(tab):
     load(tab, CENTER, WORLD)
     tab.evaluate("window.frozen = true")

@@ -116,12 +116,27 @@ def test_a_link_that_does_nothing_is_pressed_once_then_it_stops(tab):
 
 def test_an_overview_with_no_link_opens_the_switcher_then_takes_a_card(tab):
     body = ("<div data-testid='simple_switcher_combobox' id='cb' onclick=\"document.getElementById('op').hidden = false; window.said2 = 'open'\">Cards</div>"
-            "<div data-testid='simple_switcher_product_option_CARD_0' id='op' hidden onclick=\"window.said2 = 'card'\">Card</div>")
+            "<div data-testid='simple_switcher_product_option_CARD_0' id='op' hidden onclick=\"window.said2 = 'card'\"><span data-testid='simple_switcher_display_number'>••••12345</span></div>")
     load(tab, "https://global.americanexpress.com/overview", body)
     assert walk(tab)["state"] == "walking"
     assert tab.evaluate("window.said2") == "open"
     assert walk(tab)["state"] == "walking"
     assert tab.evaluate("window.said2") == "card"
+
+
+def test_a_link_with_more_words_than_the_way_there_is_not_pressed(tab):
+    body = "<a id='x' href='#' onclick='window.presses = 1'>Pay from Statements &amp; Activity</a>" + SCRIPT
+    load(tab, HOME, body)
+    walk(tab)
+    assert tab.evaluate("window.presses || 0") == 0
+
+
+def test_an_overview_option_with_no_card_number_is_not_chosen(tab):
+    body = ("<div data-testid='simple_switcher_combobox' id='cb' onclick=\"window.boxed = 1\">Cards</div>"
+            "<div data-testid='simple_switcher_product_option_OTHER' id='op' onclick=\"window.taken = 1\">Add a card</div>")
+    load(tab, "https://global.americanexpress.com/overview", body)
+    walk(tab)
+    assert tab.evaluate("window.taken || 0") == 0 and tab.evaluate("window.boxed") == 1
 
 
 def test_a_sign_in_page_is_never_walked(tab):

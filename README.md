@@ -22,7 +22,10 @@ PaperPull or TNE Enterprises LLC. See [NOTICE.md](NOTICE.md).
    itself.
 
 Files land in Downloads under `Statement Sweep/`. **Settings**, the sliders
-button in the popup, changes the folders and file names.
+button in the popup, changes the folders and file names, or sends everything
+to any folder you choose.
+
+Nothing leaves your browser. See the [privacy policy](PRIVACY.md).
 
 ## Develop
 

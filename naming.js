@@ -114,8 +114,10 @@ const fieldsOf = (provider, doc) => {
 };
 
 // The provider's own name for a document, used until you set a pattern.
-const providersOwnName = (provider, doc) => provider.fileName.replace("{date}", doc.date).replace("{title}", doc.title || "Document")
-  .replace("{id}", doc.id).replace(/[/\\:*?"<>|]/g, "-");
+const providersOwnName = (provider, doc) => {
+  const name = provider.fileName.replace("{date}", doc.date).replace("{title}", doc.title || "Document").replace("{id}", doc.id);
+  return `${clean(name.replace(/\.pdf$/i, "")) || "Document"}.pdf`;
+};
 
 export function pathFor(stored, provider, doc) {
   const naming = effective(normalise(stored), provider.id);
