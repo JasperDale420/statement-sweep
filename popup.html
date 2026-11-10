@@ -20,10 +20,12 @@
   li[data-state=ok] .say { color: var(--ok); }
   li[data-state=needs_you] .say { color: var(--wait); font-weight: 600; }
   .one { border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; padding: 0; }
+  footer { padding: 8px 16px 12px; border-top: 1px solid var(--line); }
   :focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
 </style></head>
 <body>
   <header><h1>Statement Sweep</h1><button class="go" id="go" type="button">Get new documents</button></header>
   <ul id="list"></ul>
+  <footer><button class="one" id="settings" type="button">Settings</button></footer>
   <script src="popup.js" type="module"></script>
 </body></html>

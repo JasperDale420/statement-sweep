@@ -35,5 +35,6 @@ async function draw() {
   go.disabled = Object.values(board).some((s) => s.state === "working" || s.state === "needs_you");
 }
 go.addEventListener("click", () => start());
+document.getElementById("settings").addEventListener("click", () => chrome.runtime.openOptionsPage());
 chrome.runtime.onMessage.addListener((m) => { if (m.type === "board") draw(); });
 draw();

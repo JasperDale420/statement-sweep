@@ -2,6 +2,7 @@
 // are not signed in, read its list, and save what is new. Nothing leaves the
 // browser except the requests the provider's own page would make.
 import { PROVIDERS } from "./providers/index.js";
+import { pathFor } from "./naming.js";
 
 const SIGN_IN_WAIT_MS = 5 * 60 * 1000;
 const MAX_VIEWS = 300;
@@ -143,12 +144,6 @@ function finished(downloadId) {
   });
 }
 
-const folder = (provider) => `Statement Sweep/${provider.name.replace(/[^A-Za-z0-9 ]/g, "")}`;
-function fileFor(provider, doc) {
-  const name = provider.fileName.replace("{date}", doc.date).replace("{title}", doc.title || "Document")
-    .replace("{id}", doc.id).replace(/[/\\:*?"<>|]/g, "-");
-  return `${folder(provider)}/${name}`;
-}
 const saveBase64 = async (base64, filename) => finished(await chrome.downloads.download({
   url: `data:application/pdf;base64,${base64}`, filename, conflictAction: "uniquify", saveAs: false,
 }));
@@ -195,7 +190,8 @@ function nextDownload(provider, filename, nameMustMatch) {
 }
 
 async function saveOne(tabId, provider, doc) {
-  const filename = fileFor(provider, doc);
+  const { naming } = await chrome.storage.local.get("naming");
+  const filename = pathFor(naming, provider, doc);
   if (doc.method === "fetch") {
     const pdf = await inPage(tabId, provider, fetchPdf, [doc]);
     if (!pdf || !pdf.ok) return { ok: false, why: (pdf && pdf.why) || "The site did not send it." };
