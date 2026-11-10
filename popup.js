@@ -2,6 +2,7 @@ import { PROVIDERS } from "./providers/index.js";
 import { askFor, getFolder } from "./folders.js";
 import { gapKey, gapWords, keysFor, localIso, needsRun, rankOf, recordOf, siteStatus, stateOf, statusWords } from "./cadence.js";
 import { OFFERS_ON, detailsKey, hasOffers, liveDetails, offerCounts } from "./offers.js";
+import { countWords, percent, runProgress } from "./progress.js";
 
 const go = document.getElementById("go");
 const scroll = document.getElementById("scroll");
@@ -48,6 +49,26 @@ async function showTab(tabId) {
   } catch (e) { /* that tab is gone */ }
 }
 const busyIn = (board) => Object.values(board).some((s) => s.state === "working" || s.state === "needs_you");
+// The lines of the latest run: older lines stay on the board until their
+// site runs again, and are not added into this run's bar.
+const latestRun = (board) => Math.max(0, ...Object.values(board).map((s) => s.run || 0));
+const inRun = (board, id) => Boolean(board[id]) && (board[id].run || 0) === latestRun(board);
+// Stop was pressed in this popup, and the engine has not finished yet.
+let stopping = false;
+
+// Fills a bar from a progress record (progress.js): a share of its width, or
+// stripes when there is no number yet.
+function paintBar(bar, p, kind) {
+  const pct = percent(p);
+  bar.dataset.kind = kind || "";
+  bar.toggleAttribute("data-unknown", pct === null);
+  bar.style.setProperty("--pct", `${pct ?? 0}%`);
+  bar.setAttribute("aria-valuemin", "0");
+  bar.setAttribute("aria-valuemax", "100");
+  if (pct === null) bar.removeAttribute("aria-valuenow"); else bar.setAttribute("aria-valuenow", String(pct));
+  const words = countWords(p);
+  if (words) bar.setAttribute("aria-valuetext", words); else bar.removeAttribute("aria-valuetext");
+}
 const count = (rows, pattern) => rows.reduce((sum, r) => sum + Number((pattern.exec(r.text) || [0, 0])[1]), 0);
 
 // Where each site stands, from the dates of what it has saved (cadence.js).
@@ -99,11 +120,21 @@ function say(board, off) {
 
 function drawHeader(board, off) {
   const busy = busyIn(board);
+  if (!busy) stopping = false;
   const [kind, text] = say(board, off);
-  summary.textContent = text;
+  // While a sync goes, the summary adds how far the whole of it has got.
+  const all = runProgress(PROVIDERS.filter((p) => inRun(board, p.id)).map((p) => board[p.id]));
+  const words = busy ? countWords(all) : "";
+  summary.textContent = words ? `${text} · ${words}` : text;
   summary.dataset.kind = kind;
-  go.textContent = busy ? "Working…" : "Get New Documents";
-  go.disabled = busy || !pickedOf(off).length;
+  const allbar = document.getElementById("allbar");
+  allbar.hidden = !busy;
+  if (busy) paintBar(allbar, all, stopping ? "bad" : "");
+  // While it goes, the one button stops it.
+  go.textContent = busy ? (stopping ? "Stopping…" : "Stop") : "Get New Documents";
+  go.classList.toggle("primary", !busy);
+  go.classList.toggle("secondary", busy);
+  go.disabled = busy ? stopping : !pickedOf(off).length;
 }
 
 // The site's own small logo, from Chrome's favicon cache: nothing is bundled
@@ -214,6 +245,25 @@ function row(provider, status, off, busy, board, skipped) {
     text.textContent = status.text;
     li.append(text);
   }
+  // Its bar, while it works or waits for you, and where a stopped one got to.
+  // A site that finished has its check instead.
+  const p = status && status.progress;
+  const going = status && (status.state === "working" || status.state === "needs_you");
+  const cutShort = status && status.state === "bad" && p && p.total && p.done < p.total;
+  if (p && inRun(board, provider.id) && (going || cutShort)) {
+    const progress = document.createElement("div");
+    progress.className = "progress";
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    bar.setAttribute("role", "progressbar");
+    bar.setAttribute("aria-label", provider.name);
+    bar.append(document.createElement("div"));
+    paintBar(bar, p, status.state === "working" ? "" : status.state);
+    const words = document.createElement("span");
+    words.textContent = countWords(p);
+    progress.append(bar, words);
+    li.append(progress);
+  }
   // What the card offers did, on a line of its own, so a stop there is
   // orange while the site's statements stay as they are.
   if (status && status.offers && status.offers.text) {
@@ -289,14 +339,21 @@ async function draw() {
   // A redraw must not take the keyboard or the scroll position away from you.
   const kept = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.focus : "";
   const top = scroll.scrollTop;
-  scroll.replaceChildren(...SECTIONS.flatMap(([state, title]) => {
-    const members = PROVIDERS.filter((p) => (board[p.id] ? board[p.id].state : "") === state).sort(byNeed);
+  // While a sync goes, its sites stay in one list in one order, so the row
+  // you are watching does not move as it works and finishes. Only a site
+  // that needs you moves, to the top, so it is never below the fold.
+  const stateOf_ = (p) => (board[p.id] ? board[p.id].state : "");
+  const groupOf = (p) => (!busy ? stateOf_(p) : stateOf_(p) === "needs_you" ? "needs_you" : inRun(board, p.id) ? "run" : "");
+  const sections = busy ? [["needs_you", "Needs You"], ["run", "This Sync"], ["", "Not in This Sync"]] : SECTIONS;
+  scroll.replaceChildren(...sections.flatMap(([state, title]) => {
+    // A site's need changes as it saves, so the run's list keeps the site list's own order.
+    const members = PROVIDERS.filter((p) => groupOf(p) === state).sort(state === "run" ? () => 0 : byNeed);
     if (!members.length) return [];
     const section = document.createElement("section");
     section.dataset.state = state;
     const heading = document.createElement("h2");
     heading.id = `heading-${state || "sites"}`;
-    heading.textContent = state === "" && hasResults ? "Not Run Yet" : title;
+    heading.textContent = state === "" && hasResults && !busy ? "Not Run Yet" : title;
     const list = document.createElement("ul");
     list.setAttribute("aria-labelledby", heading.id);
     // After a run, a ticked site that was left out for being up to date says so.
@@ -315,6 +372,12 @@ async function draw() {
 go.addEventListener("click", async () => {
   const { board = {} } = await chrome.storage.session.get("board");
   const { off = [] } = await chrome.storage.local.get("off");
+  if (busyIn(board)) {
+    stopping = true;
+    drawHeader(board, off);
+    chrome.runtime.sendMessage({ type: "stop" });
+    return;
+  }
   const sites = pickedOf(off);
   if (sites.length) start(undefined, sites);
 });

@@ -8,6 +8,7 @@ import { INBOX, getFolder, isGranted, moveFromInbox, withinChosen, writeFile } f
 import { backfillFor, documentDate, isDue, isTaxDocument, keysFor, localIso, recordOf, siteStatus } from "./cadence.js";
 import { amount, cleanUrl, errorText, makeLogs } from "./log.js";
 import { OFFERS_WAIT, hasOffers, makeOffers, offersWanted, offersWords } from "./offers.js";
+import { addFound, estimateNew, foundKey, foundOf, siteProgress } from "./progress.js";
 
 // The run's logs (log.js): what each site did and why it stopped, written to
 // each site's Logs folder as the run goes. `note` adds one line for a site.
@@ -27,6 +28,13 @@ const human = () => sleep(1500 + Math.random() * 1500);
 
 // One run at a time, of one site or of all of them.
 let running = false;
+// When this run began, on each of its lines on the board, so the popup adds
+// up only this run's sites; whether you pressed Stop; and how far each site
+// has got (progress.js), for its bar.
+let runAt = 0;
+let stopAsked = false;
+const progressFor = new Map();
+const STOPPED = "You stopped the sync. The rest wait for next time.";
 // The tab each site is sweeping in, so its line on the board can say which
 // tab to show you.
 const tabFor = new Map();
@@ -130,7 +138,8 @@ async function say(id, state, text, offers) {
   await serially(async () => {
     const tab = tabId === undefined ? null : await chrome.tabs.get(tabId).catch(() => null);
     const { board = {} } = await chrome.storage.session.get("board");
-    board[id] = { state, text, at: Date.now(), ...(tab ? { tab: tab.id } : {}), ...(offers ? { offers } : {}) };
+    const progress = progressFor.get(id);
+    board[id] = { state, text, at: Date.now(), run: runAt, ...(tab ? { tab: tab.id } : {}), ...(offers ? { offers } : {}), ...(progress ? { progress } : {}) };
     await chrome.storage.session.set({ board });
     await badge(board);
   });
@@ -821,16 +830,30 @@ async function sweep(provider, together = false) {
     tabFor.delete(provider.id);
     return ours ? chrome.tabs.remove(tab.id).catch(() => {}) : null;
   };
-  await say(provider.id, "working", "Looking…");
 
   let count = 0;
   let failed = 0;
   let inARow = 0;
   let lastWhy = "";
   const notes = [];
+  // Its bar: an estimate from its past syncs until its lists are read.
+  const fkey = foundKey(provider.id);
+  const kept = await chrome.storage.local.get([fkey, ...keysFor(provider.id)]);
+  const estimate = estimateNew(foundOf(kept, provider.id), siteStatus(recordOf(kept, provider.id), localIso()));
+  let listed = 0;
+  let more = true;
+  const track = () => progressFor.set(provider.id, siteProgress({ done: count + failed, listed, more, estimate }));
+  track();
+  // Stop pressed: what is saved stays saved, and the sweep's own tab closes.
+  const stopped = async () => {
+    await closeOurs();
+    return say(provider.id, "bad", `${count} saved. ${STOPPED}`);
+  };
+  await say(provider.id, "working", "Looking…");
   // One pass per view of the provider's documents: an account, or a year of
   // one. A recipe with more to show says `more`, and nextView moves it on.
   views: for (let views = 0; ; views += 1) {
+    if (stopAsked) return stopped();
     if (views > MAX_VIEWS) return say(provider.id, "bad", `${count} saved, then it stopped. There were more views than expected.`);
     let list;
     try {
@@ -844,6 +867,7 @@ async function sweep(provider, together = false) {
       await closeOurs();
       return say(provider.id, "bad", `${count ? `${count} saved. ` : ""}Stopped waiting for you to sign in.`);
     }
+    if (list.state === "skipped" && stopAsked) return stopped();
     // Skip this site, on its guide card: the tab is left as it is.
     if (list.state === "skipped") {
       if (!ours) tabFor.delete(provider.id);
@@ -851,6 +875,11 @@ async function sweep(provider, together = false) {
     }
 
     const fresh = (list.docs || []).filter((d) => !seen.has(d.id));
+    // What is done already, and what this list holds still to do. Counted
+    // this way, a list read again after its tab was replaced is not counted twice.
+    listed = count + failed + fresh.length;
+    more = Boolean(list.more);
+    track();
     // Documents saved before dates were kept get theirs from the list.
     await remember(provider, (list.docs || []).filter((d) => seen.has(d.id)));
     const problem = fresh.length ? await folderProblem(fresh) : "";
@@ -869,6 +898,8 @@ async function sweep(provider, together = false) {
       ]));
     }
     for (const [i, doc] of fresh.entries()) {
+      if (stopAsked) return stopped();
+      track();
       await say(provider.id, "working", `Saving ${i + 1} of ${fresh.length}…`);
       const result = await timed(provider, "save", () => saveOne(tab.id, provider, doc))
         .catch((e) => {
@@ -924,13 +955,19 @@ async function sweep(provider, together = false) {
     if (next.note) notes.push(next.note);
     if (!next.moved) break;
   }
+  // Every list is read: the bar is exact, and what this sync found is kept
+  // for the next one's estimate.
+  more = false;
+  track();
+  const pastFound = foundOf(await chrome.storage.local.get(fkey), provider.id);
+  await chrome.storage.local.set({ [fkey]: addFound(pastFound, count + failed) });
   // Card offers, when you turned them on for this site, in the same tab and
   // sign-in, once every statement it found is saved: a statement that did
   // not save keeps the tab on its list for the next run. What the offers did
   // is only ever a line of its own; it never changes how the site stands.
   const done = [count ? `${count} new.` : "Nothing new.", ...new Set(notes)].join(" ");
   let offered;
-  if (hasOffers(provider) && (await offersWanted(provider))) {
+  if (!stopAsked && hasOffers(provider) && (await offersWanted(provider))) {
     offered = failed ? { kind: "waiting", text: OFFERS_WAIT } : await offersPass(provider, tab.id, ours, done);
   }
   if (failed) {
@@ -1103,6 +1140,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
   running = true;
+  runAt = Date.now();
+  stopAsked = false;
+  progressFor.clear();
   (async () => {
     if (!(await offersWanted(provider))) {
       running = false;
@@ -1133,9 +1173,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
+// Stop, from the popup: no site starts or saves another document, every wait
+// for a sign-in ends, and what was saved stays saved. Card offers already
+// being added finish their own short, capped pass. Heard only from this
+// extension's own pages, as Add Offers Now is.
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (!message || message.type !== "stop") return;
+  const own = chrome.runtime.getURL ? chrome.runtime.getURL("") : "";
+  if (!sender || sender.id !== chrome.runtime.id || !own || !String(sender.url || "").startsWith(own)) return;
+  if (!running || stopAsked) return;
+  stopAsked = true;
+  logs.runLine("Stop pressed: no site starts or saves another document.");
+  for (const w of waits.values()) {
+    w.skipped = true;
+    w.wake();
+  }
+});
+
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type !== "sweep" || running) return;
   running = true;
+  runAt = Date.now();
+  stopAsked = false;
+  progressFor.clear();
   logs.begin();
   (async () => {
     const keepAlive = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
@@ -1158,6 +1218,10 @@ chrome.runtime.onMessage.addListener((message) => {
       }
       const runGroup = async (group) => {
         for (const provider of group) {
+          if (stopAsked) {
+            await say(provider.id, "bad", `Not reached. ${STOPPED}`);
+            continue;
+          }
           logs.started(provider);
           note(provider, `Sweep of ${provider.name} begins${together ? ", with the other sites at once" : ""}.`);
           try {
