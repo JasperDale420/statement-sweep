@@ -6,7 +6,9 @@
   ],
   "listUrl": "https://robinhood.com/account/reports-statements/individual",
   "pageFile": "providers/robinhood.page.js",
-  "fileName": "{date} Robinhood Monthly Statement.pdf",
+  "fileName": "{date} Robinhood {title}.pdf",
   "family": "click",
-  "enabled": false
+  "fileHosts": [
+    "mountain-storage.s3.amazonaws.com"
+  ]
 }

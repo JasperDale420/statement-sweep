@@ -1,5 +1,9 @@
 // Runs inside Simmons Bank's own page (Banno). Reads and downloads only.
 //
+// The documents page lists every account's documents in one answer and
+// draws a row for each, so every account is read at once and nothing is
+// pressed to move between them.
+//
 // The page's user id appears only in the address of its own list call, which
 // the browser's resource timing shows here. Those addresses answer with the
 // browser's cookies alone, so the list and PDFs are asked for in-page, and
@@ -103,7 +107,6 @@
       seen.add(e.documentId);
       out.push({ id: e.documentId, date, title, kind: e.documentType, account: accounts[0] });
     }
-    if (new Set(out.map((x) => x.account)).size > 1) return { why: "The answer names more than one account, and this reads one." };
     return { entries: out };
   }
 
@@ -125,15 +128,17 @@
       if (typeof el.checkVisibility !== "function" || !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return { why: "A document row is not drawn." };
       if (items.has(item)) return { why: "A list item holds two document rows." };
       items.add(item);
-      rows.push({ title: m[1], type: m[2], account: m[3] });
+      rows.push({ title: m[1], type: m[2], account: m[3], last4: m[5] });
     }
     return { rows };
   }
 
+  // The documents of one account, or one account's rows, as one sorted word.
+  const key = (title, type) => `${type}\u0000${title}`;
+  const shapeOf = (keys) => keys.slice().sort().join("\u0001");
+
   function disagree(rows, entries) {
-    if (new Set(rows.map((r) => r.account)).size > 1) return "The rows name more than one account.";
     if (rows.length !== entries.length) return "The page does not draw one row for each document.";
-    const key = (title, type) => `${type}\u0000${title}`;
     const count = new Map();
     for (const e of entries) count.set(key(e.title, TYPES[e.kind]), (count.get(key(e.title, TYPES[e.kind])) || 0) + 1);
     for (const r of rows) {
@@ -142,6 +147,31 @@
       count.set(key(r.title, r.type), left - 1);
     }
     return "";
+  }
+
+  // Each account of the answer bound to the one account the rows name with
+  // the very same documents: {names: Map(accountId -> "(x1234)")}, or {why}.
+  // With one account the bank's own titles are kept as they are.
+  function accountNames(rows, entries) {
+    const ids = [...new Set(entries.map((e) => e.account))];
+    const labels = [...new Set(rows.map((r) => r.account))];
+    if (ids.length !== labels.length) return { why: "The rows name another number of accounts than the answer." };
+    if (ids.length <= 1) return { names: new Map(ids.map((id) => [id, ""])) };
+    const byLabel = new Map(labels.map((l) => [shapeOf(rows.filter((r) => r.account === l).map((r) => key(r.title, r.type))), l]));
+    if (byLabel.size !== labels.length) return { why: "Two accounts on the page hold the same documents, so they cannot be told apart." };
+    const names = new Map();
+    const tails = new Set();
+    const used = new Set();
+    for (const id of ids) {
+      const label = byLabel.get(shapeOf(entries.filter((e) => e.account === id).map((e) => key(e.title, TYPES[e.kind]))));
+      if (!label || used.has(label)) return { why: "An account's documents in the answer are not the rows the page draws for it." };
+      used.add(label);
+      const last4 = rows.find((r) => r.account === label).last4;
+      if (tails.has(last4)) return { why: "Two accounts end in the same four digits." };
+      tails.add(last4);
+      names.set(id, `(x${last4})`);
+    }
+    return { names };
   }
 
   async function readList() {
@@ -182,7 +212,12 @@
     if (drawn.why) return stop(drawn.why);
     const wrong = disagree(drawn.rows, read.entries);
     if (wrong) return stop(wrong);
-    const docs = read.entries.map(({ id, date, title }) => ({ id, date, title, method: "fetch" }));
+    const named = accountNames(drawn.rows, read.entries);
+    if (named.why) return stop(named.why);
+    const docs = read.entries.map(({ id, date, title, account }) => {
+      const name = named.names.get(account);
+      return { id, date, title: name ? `${title} ${name}` : title, method: "fetch" };
+    });
     docs.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     return { state: "ok", docs };
   }

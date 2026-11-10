@@ -6,7 +6,7 @@
   ],
   "listUrl": "https://digital.firsthorizon.com/#accounts/documents",
   "pageFile": "providers/firsthorizon.page.js",
-  "fileName": "{date} First Horizon Bank Statement.pdf",
+  "fileName": "{date} First Horizon Bank {title}.pdf",
   "family": "click",
   "downloadWaitSeconds": 60
 }

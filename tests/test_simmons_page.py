@@ -154,11 +154,77 @@ def test_a_key_that_may_say_there_is_more_stops(tab):
     assert read(tab)["state"] == "stopped"
 
 
-def test_two_accounts_stop(tab):
-    two = json.loads(json.dumps(DOCS))
-    two[0]["accountIds"] = ["7e7e7e7e-2222-4333-8444-955566668888"]
-    load(tab, "/documents", GOOD, answer={"documents": two})
+OTHER = "7e7e7e7e-2222-4333-8444-955566668888"
+ACCT2 = "PERSONAL CHECKING 55501234 (x1234)"
+D4 = "11111111-aaaa-4bbb-8ccc-000000000004"
+D5 = "11111111-aaaa-4bbb-8ccc-000000000005"
+
+
+def of(account, d):
+    d = json.loads(json.dumps(d))
+    d["accountIds"] = [account]
+    return d
+
+
+# A second account with a statement of the same title and date as the loan's.
+SECOND = [of(OTHER, doc(D4, "statement", "Loan Periodic Statement October 2031", "2031-10-13")),
+          of(OTHER, doc(D5, "statement", "Checking Statement September 2031", "2031-09-30"))]
+BOTH = DOCS + SECOND
+BOTH_ROWS = rows(DOCS) + rows(SECOND, ACCT2)
+
+
+def test_every_account_on_the_list_is_read_at_once(tab):
+    load(tab, "/documents", page_html(BOTH_ROWS), answer={"documents": BOTH})
+    got = read(tab)
+    assert got["state"] == "ok" and "more" not in got
+    assert {(d["id"], d["title"]) for d in got["docs"]} == {
+        (D1, "Loan Periodic Statement October 2031 (x9786)"), (D2, "Prime Rate Notice August 2031 (x9786)"),
+        (D3, "2030 Tax Reporting January 2031 (x9786)"), (D4, "Loan Periodic Statement October 2031 (x1234)"),
+        (D5, "Checking Statement September 2031 (x1234)")}
+    assert len({d["id"] for d in got["docs"]}) == 5
+
+
+def test_the_ids_of_one_account_stay_the_banks_own_with_a_second_account(tab):
+    load(tab, "/documents", GOOD)
+    alone = {d["id"]: d["date"] for d in read(tab)["docs"]}
+    load(tab, "/documents", page_html(BOTH_ROWS), answer={"documents": BOTH})
+    both = {d["id"]: d["date"] for d in read(tab)["docs"]}
+    assert alone.items() <= both.items()
+
+
+def test_a_walk_reads_the_same_and_presses_nothing(tab):
+    load(tab, "/documents", page_html(BOTH_ROWS) + "<script>window.pressed = []; document.addEventListener('click', (e) => pressed.push(1), true);</script>",
+         answer={"documents": BOTH})
+    plain = read(tab)
+    walked = tab.evaluate("__sweep.readList({walk: true})")
+    assert walked == plain and walked["state"] == "ok"
+    assert tab.evaluate("window.pressed") == []
+
+
+def test_a_second_account_the_page_does_not_draw_stops(tab):
+    load(tab, "/documents", GOOD, answer={"documents": BOTH})
     assert read(tab)["state"] == "stopped"
+
+
+def test_rows_under_the_wrong_account_stop(tab):
+    swapped = rows(DOCS[:1], ACCT2) + rows(DOCS[1:]) + rows(SECOND[:1]) + rows(SECOND[1:], ACCT2)
+    load(tab, "/documents", page_html(swapped), answer={"documents": BOTH})
+    got = read(tab)
+    assert got["state"] == "stopped" and "not the rows" in got["why"]
+
+
+def test_two_accounts_that_cannot_be_told_apart_stop(tab):
+    twin = [of(OTHER, dict(d, documentId=d["documentId"][:-1] + "9")) for d in DOCS[:1]]
+    load(tab, "/documents", page_html(rows(DOCS[:1]) + rows(twin, ACCT2)), answer={"documents": DOCS[:1] + twin})
+    got = read(tab)
+    assert got["state"] == "stopped" and "told apart" in got["why"]
+
+
+def test_two_accounts_with_one_last_four_stop(tab):
+    load(tab, "/documents", page_html(rows(DOCS) + rows(SECOND, "PERSONAL CHECKING 55509786 (x9786)")),
+         answer={"documents": BOTH})
+    got = read(tab)
+    assert got["state"] == "stopped" and "four digits" in got["why"]
 
 
 def test_a_list_asked_from_a_later_day_than_the_banks_stops(tab):

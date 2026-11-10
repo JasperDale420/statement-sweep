@@ -16,15 +16,32 @@ when you start a sweep.
 It never reads, stores or fills in your passwords. You sign in yourself, or
 your password manager does.
 
+While a site waits for you to sign in or finish a step, a small Statement Sweep
+card is drawn in that site's tab saying what to do; it reads nothing from the
+page and fills nothing in.
+
 ## What it keeps, on your computer only
 
 - The documents it saves, in your Downloads folder or a folder you choose.
 - A list of which documents it has already saved, so they are not saved twice.
   This holds each document's date and an identifier for it, which for some
-  sites includes an account number.
+  sites includes an account number, and notes which documents are tax forms.
+- From those dates, how often each site sends a document, so it can say which
+  sites are due and run only those. About once a day, and when your browser
+  starts, it works this out again from what is stored and shows the number of
+  sites due on its toolbar button. That check reads only the stored dates: it
+  opens no site and sends nothing.
 - Your choices: which sites are ticked, and your folder and file name patterns.
 - The latest status of each site, and how long each step took, until you close
   your browser.
+- A log of each sweep: what each site did and why it stopped, so a site that
+  does not save can be fixed. It is written to a Logs folder in the folder you
+  chose, or, with no folder chosen, the latest lines are kept in the browser's
+  storage until you export them from Settings. It holds the extension's own
+  short notes, page addresses without anything after a `?` or `#`, and
+  numbers, with every number of 5 or more digits cut to its last 4 (such as
+  #####1234). It never holds a page's text, your cookies, or what is in a
+  document. Old logs are removed after 30 runs per site.
 
 All of this stays in your browser's storage and the folders above. Removing
 the extension deletes everything except the documents you saved.
@@ -36,9 +53,28 @@ the extension deletes everything except the documents you saved.
 - **Scripting:** to run that site's reading steps inside its page.
 - **Downloads:** to save documents and give them the names you chose.
 - **Storage:** to remember the items listed above.
+- **Alarms:** to do the daily check of which sites are due.
 - **Content settings:** to let the site you are sweeping download more than one
-  file in a row. It is set only for that site during a sweep and removed
-  when the sweep ends.
+  file in a row, and open a document in a new window when that is how the
+  site hands it over. Both are set only for that site during a sweep and
+  removed when the sweep ends.
+- **Debugger:** to save a document that a site shows only as a web page, such
+  as a Venmo month or an Apple Store invoice, as a PDF. Chrome's own print
+  makes the PDF. It is used only in a tab the sweep opened itself, only while
+  that one page is printed, and is let go straight after. Chrome shows a bar
+  saying Statement Sweep is debugging the browser while it does this. If you
+  press Cancel on that bar, the sweep stops that site. It reads nothing else
+  through it, and the page is never changed or sent anywhere.
+- **Web navigation:** to tell which tab opened a new one, so that only a tab
+  a site's own statement button opened from the sweep's tab is taken and
+  closed. It is listened to only while that one press is waited on. Nothing
+  about your browsing is kept.
+- **The file hosts listed with a site** (such as
+  mountain-storage.s3.amazonaws.com for Robinhood, or statements.cardless.com
+  for Bilt and the Coinbase One Card): some sites open a statement on a file
+  host of their own instead of downloading it. The sweep then fetches that
+  one address, from that host only, without your cookies, and closes the tab
+  the site opened.
 
 ## Changes and contact
 

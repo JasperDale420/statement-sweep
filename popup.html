@@ -21,16 +21,31 @@
   li + li { border-top: 1px solid var(--separator); }
   li label { display: contents; cursor: default; }
   input[type=checkbox] { width: 14px; height: 14px; margin: 0; }
-  .name { grid-column: 2; font-size: 13px; line-height: 18px; }
+  .name { grid-column: 2; display: flex; align-items: flex-start; gap: 7px; min-width: 0; font-size: 13px; line-height: 18px; }
+  .favicon { flex: none; width: 16px; height: 16px; margin-top: 1px; border-radius: 3px; }
   .state { grid-column: 3; grid-row: 1; width: 16px; height: 16px; }
   .state[data-state=needs_you] { color: var(--orange); }
   .state[data-state=working] { color: var(--secondary); animation: spin 1s linear infinite; }
   .state[data-state=bad] { color: var(--red); }
   .state[data-state=ok] { color: var(--green); }
   .one { grid-column: 4; grid-row: 1; width: 26px; height: 26px; }
-  .say { grid-column: 2 / 5; margin: 1px 6px 2px 0; color: var(--secondary); font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
+  .say { grid-column: 2 / 5; margin: 1px 6px 2px 23px; color: var(--secondary); font-size: 12px; line-height: 16px; overflow-wrap: anywhere; text-wrap: pretty; }
+  li.has-show { grid-template-columns: 16px 1fr auto 16px 26px; }
+  .show { grid-column: 3; grid-row: 1; min-height: 22px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--hover); color: var(--accent-ink); font-size: 12px; line-height: 16px; font-weight: 500; transition: background-color 150ms ease-out; }
+  .show:hover { background: var(--press); }
+  li.has-show .state { grid-column: 4; }
+  li.has-show .one { grid-column: 5; }
+  li.has-show .say { grid-column: 2 / 6; }
+  .when { grid-column: 2 / 5; margin: 1px 6px 1px 23px; color: var(--secondary); font-size: 12px; line-height: 16px; overflow-wrap: anywhere; text-wrap: pretty; }
+  li.has-show .when { grid-column: 2 / 6; }
+  .when[data-need=overdue] { color: var(--red); font-weight: 500; }
+  .when[data-need=due], .when[data-need=tax], .when[data-need=gap] { color: var(--orange); font-weight: 500; }
   section[data-state=needs_you] .name { font-weight: 600; }
   section[data-state=needs_you] .say { color: var(--ink); }
+  .switched-off .name, .switched-off .when { color: var(--secondary); }
+  .when .dismiss { all: unset; cursor: default; color: var(--accent-ink); font-weight: 500; white-space: nowrap; border-radius: 4px; }
+  .when .dismiss:hover { text-decoration: underline; }
+  .when .dismiss:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style></head>
 <body>

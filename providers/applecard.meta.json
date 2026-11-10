@@ -6,6 +6,13 @@
   ],
   "listUrl": "https://card.apple.com/",
   "pageFile": "providers/applecard.page.js",
-  "fileName": "{date} Apple Card Statement.pdf",
-  "family": "click"
+  "fileName": "{date} Apple Card {title}.pdf",
+  "family": "click",
+  "guide": {
+    "signIn": [
+      "Sign in with your Apple Account here.",
+      "Choose Trust when Apple asks, so you aren't asked for a code every time.",
+      "Statement Sweep goes on by itself once you're in."
+    ]
+  }
 }

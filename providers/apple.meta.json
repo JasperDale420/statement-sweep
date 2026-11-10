@@ -9,5 +9,11 @@
   "pageFile": "providers/apple.page.js",
   "fileName": "{date} Apple {title} Invoice.pdf",
   "family": "print",
-  "enabled": false
+  "guide": {
+    "signIn": [
+      "Sign in with your Apple Account here.",
+      "Choose Trust when Apple asks, so you aren't asked for a code every time.",
+      "Statement Sweep goes on by itself once you're in."
+    ]
+  }
 }

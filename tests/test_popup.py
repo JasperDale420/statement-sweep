@@ -10,7 +10,7 @@ TYPES = {".js": "text/javascript", ".html": "text/html", ".css": "text/css"}
 CHROME = """
 const saved = JSON.parse(sessionStorage.getItem('state') || '{}');
 window.__session = saved.board ? {board: saved.board} : {};
-window.__local = saved.off ? {off: saved.off} : {};
+window.__local = Object.assign(saved.off ? {off: saved.off} : {}, saved.local || {});
 window.__sent = []; window.__listeners = [];
 const area = (name) => ({
   get: async (keys) => { const out = {}; for (const k of [].concat(keys)) if (k in window[name]) out[k] = window[name][k]; return out; },
@@ -19,7 +19,9 @@ const area = (name) => ({
 Object.defineProperty(window, 'chrome', {value: {
   storage: {session: area('__session'), local: area('__local')},
   runtime: {sendMessage: (m) => { __sent.push(m); return Promise.resolve(); }, openOptionsPage: () => { __sent.push('options'); },
-            onMessage: {addListener: (f) => __listeners.push(f)}},
+            onMessage: {addListener: (f) => __listeners.push(f)}, getURL: (p) => 'chrome-extension://sweep' + p},
+  tabs: {update: async (id, o) => { __sent.push(['tab', id, o]); return {id, windowId: 70}; }},
+  windows: {update: async (id, o) => { __sent.push(['window', id, o]); return {id}; }},
 }});
 """
 
@@ -41,13 +43,14 @@ def tab():
         b.close()
 
 
-def st(state, text):
-    return {"state": state, "text": text, "at": 1}
+def st(state, text, tab=None):
+    return {"state": state, "text": text, "at": 1, **({"tab": tab} if tab is not None else {})}
 
 
-def show(tab, board=None, off=None):
+def show(tab, board=None, off=None, local=None, today="2026-11-09T12:00:00"):
+    tab.clock.set_fixed_time(today)
     tab.goto(BASE)
-    tab.evaluate("s => sessionStorage.setItem('state', JSON.stringify(s))", {"board": board or {}, "off": off or []})
+    tab.evaluate("s => sessionStorage.setItem('state', JSON.stringify(s))", {"board": board or {}, "off": off or [], "local": local or {}})
     tab.goto(BASE + "popup.html")
     tab.wait_for_selector("#scroll li")
 
@@ -60,9 +63,13 @@ def names_under(tab, state):
     return tab.locator(f"section[data-state='{state}'] .name").all_inner_texts()
 
 
-def test_before_any_run_it_says_how_many_sites_are_selected(tab):
+def test_before_any_run_it_says_how_many_sites_need_updating(tab):
+    # With no history every site needs updating, so every one not switched off is ticked.
     show(tab, off=["amex", "chase"])
-    assert tab.inner_text("#summary") == "15 of 17 sites selected"
+    assert tab.inner_text("#summary") == f"{len(SITES) - 2} sites need updating"
+    for name in ("American Express", "Chase"):
+        box = tab.locator(f"li:has(button[aria-label='Run {name}']) input[type=checkbox]")
+        assert box.is_disabled() and not box.is_checked()
     assert headings(tab) == ["Sites"] and tab.inner_text("#go") == "Get New Documents" and not tab.is_disabled("#go")
 
 
@@ -112,8 +119,10 @@ def test_unticking_every_site_leaves_nothing_to_start(tab):
     show(tab)
     for box in tab.locator("input[type=checkbox]").all():
         box.uncheck()
-    tab.wait_for_function("document.getElementById('summary').textContent === 'No sites selected'")
+    tab.wait_for_function("document.getElementById('summary').textContent.endsWith('need updating, none ticked')")
     assert tab.is_disabled("#go")
+    # Unticking chooses for this time only: nothing is switched off.
+    assert tab.evaluate("window.__local.off || []") == []
 
 
 def test_run_asks_for_one_site_and_get_new_for_all(tab):
@@ -145,3 +154,198 @@ def test_status_is_announced_and_lists_are_named_by_their_heading(tab):
     show(tab, {"chase": st("needs_you", "a")})
     assert tab.get_attribute("#summary", "role") == "status"
     assert tab.locator("section[data-state=needs_you] ul").get_attribute("aria-labelledby") == "heading-needs_you"
+
+
+def test_sites_working_at_once_are_counted(tab):
+    show(tab, {"amex": st("working", "Looking…"), "chase": st("working", "Saving 1 of 3…")})
+    assert tab.inner_text("#summary") == "Working on 2 sites…"
+
+
+def test_a_site_with_an_open_tab_can_show_it_even_while_working(tab):
+    show(tab, {"chase": st("needs_you", "Sign in to Chase in its tab.", tab=41), "amex": st("working", "Looking…", tab=42),
+               "irs": st("bad", "0 saved.", tab=43), "alpaca": st("ok", "1 new."), "sdge": st("working", "Waiting for x.")})
+    assert tab.locator("button.show").evaluate_all("b => b.map(x => x.getAttribute('aria-label'))") == ["Show Chase", "Show American Express", "Show IRS"]
+    assert tab.locator("button.show:disabled").count() == 0
+    assert tab.inner_text("button[aria-label='Show Chase']") == "Show"
+    tab.click("button[aria-label='Show Chase']")
+    tab.wait_for_function("__sent.length === 2")
+    assert tab.evaluate("__sent") == [["tab", 41, {"active": True}], ["window", 70, {"focused": True}]]
+
+
+def test_show_sits_in_the_row_beside_its_name(tab):
+    show(tab, {"chase": st("needs_you", "Sign in to Chase in its tab. This goes on by itself.", tab=41)})
+    name, button, state, run = (tab.locator(f"section[data-state=needs_you] {s}").bounding_box() for s in (".name", ".show", ".state", ".one"))
+    assert name["x"] + name["width"] <= button["x"] < state["x"] < run["x"]
+    assert abs((button["y"] + button["height"] / 2) - (name["y"] + name["height"] / 2)) < 2
+    assert tab.locator("section[data-state=needs_you] .say").bounding_box()["y"] > button["y"] + button["height"] - 1
+
+
+def test_each_site_has_its_own_icon_from_chromes_favicon_cache(tab):
+    import json, urllib.parse
+    show(tab)
+    icons = tab.locator("li .name img.favicon").evaluate_all("i => i.map(x => [x.getAttribute('src'), x.alt, x.getAttribute('aria-hidden')])")
+    listed = json.loads(tab.evaluate("import('/providers/index.js').then(m => JSON.stringify(m.PROVIDERS.map(p => p.listUrl)))"))
+    assert len(icons) == len(listed) == tab.locator("li").count()
+    for (src, alt, hidden), url in zip(icons, listed):
+        parts = urllib.parse.urlsplit(src)
+        assert (parts.scheme, parts.netloc, parts.path) == ("chrome-extension", "sweep", "/_favicon/")
+        assert urllib.parse.parse_qs(parts.query) == {"pageUrl": [url], "size": ["32"]}
+        assert alt == "" and hidden == "true"
+    assert tab.locator(".name").first.inner_text() == "Alpaca"
+
+
+# What is due, from the dates each site has saved (cadence.js).
+from datetime import date, timedelta
+import json as _json
+TODAY = date(2026, 11, 9)
+# Every site that is switched on, as tools/build.py lists them.
+SITES = [m["id"] for m in (_json.loads(p.read_text()) for p in sorted((Path(__file__).resolve().parents[1] / "providers").glob("*.meta.json"))) if m.get("enabled", True)]
+
+
+def monthly(site, newest, n=12, gap=30, prefix="card"):
+    """A site's record of n documents `gap` days apart, the newest `newest`."""
+    ids = [f"{prefix}:{(newest - timedelta(days=gap * i)).isoformat()}" for i in range(n)]
+    return {f"seen:{site}": ids}
+
+
+def history(**sites):
+    out = {}
+    for record in sites.values():
+        out.update(record)
+    return out
+
+
+LATE = history(
+    chase=monthly("chase", date(2026, 10, 31)),                      # up to date, next around Nov 30
+    amex=monthly("amex", date(2026, 8, 31)),                         # overdue
+    paypal=monthly("paypal", date(2026, 9, 25)),                     # new one likely
+    sdge=monthly("sdge", date(2026, 10, 28), n=12) | {"seen:sdge": [f"card:2026-{m:02d}-28" for m in range(1, 11) if m != 3]},  # a gap
+    irs={"seen:irs": ["only-one"]},                                  # too little history
+)
+
+
+def whens(tab, state=""):
+    return tab.locator(f"section[data-state='{state}'] li").evaluate_all(
+        "ls => ls.map(l => [l.querySelector('.name').textContent, (l.querySelector('.when') || {}).textContent || '', (l.querySelector('.when') || {dataset: {}}).dataset.need || ''])")
+
+
+def test_each_site_says_where_it_stands_under_its_name(tab):
+    show(tab, local=LATE)
+    got = {name: (text, need) for name, text, need in whens(tab)}
+    assert got["Chase"] == ("Up to date · next around Nov 30", "current")
+    assert got["American Express"] == ("Overdue by 40 days · newest Aug 31", "overdue")
+    assert got["PayPal"] == ("New one likely · expected around Oct 25", "due")
+    assert got["SDG&E"] == ("Up to date · next around Nov 28 · Possible gap: Mar 2026 Dismiss", "gap")
+    assert got["IRS"] == ("No schedule yet · 1 saved", "unknown")
+    assert got["Alpaca"] == ("Nothing saved yet", "never")
+    # Under the name, above anything a run said, inside the row.
+    name, when = (tab.locator(f"li:has(button[aria-label='Run Chase']) {s}").bounding_box() for s in (".name", ".when"))
+    assert when["y"] >= name["y"] + name["height"] - 1 and abs(when["x"] - (name["x"] + 23)) < 2
+
+
+def test_rows_are_ordered_by_what_needs_you(tab):
+    show(tab, local=LATE)
+    names = [n for n, _, _ in whens(tab)]
+    assert names[:3] == ["American Express", "PayPal", "SDG&E"]
+    assert names[-1] == "Chase" and names.index("Alpaca") < names.index("IRS") < names.index("Chase")
+    assert headings(tab) == ["Sites"]
+
+
+def test_ordering_by_need_keeps_the_grouping_by_run_state(tab):
+    show(tab, {"chase": st("ok", "1 new."), "irs": st("working", "Looking…")}, local=LATE)
+    assert headings(tab) == ["In Progress", "Done", "Not Run Yet"]
+    assert names_under(tab, "ok") == ["Chase"] and names_under(tab, "working") == ["IRS"]
+    assert names_under(tab, "")[:3] == ["American Express", "PayPal", "SDG&E"]
+
+
+def test_get_new_runs_only_what_needs_running(tab):
+    show(tab, local=LATE, off=["paypal"])
+    assert tab.inner_text("#summary") == f"{len(SITES) - 2} sites need updating, 1 up to date"
+    tab.click("#go")
+    tab.wait_for_function("__sent.length === 1")
+    sent = tab.evaluate("__sent")[0]
+    assert sent["type"] == "sweep" and sent.get("only") is None
+    assert "chase" not in sent["sites"] and "paypal" not in sent["sites"]
+    assert {"amex", "sdge", "irs", "alpaca"} <= set(sent["sites"]) and len(sent["sites"]) == len(SITES) - 2
+
+
+def test_a_site_whose_last_run_stopped_is_run_again_even_if_up_to_date(tab):
+    everything = history(**{p: monthly(p, date(2026, 11, 1)) for p in SITES})
+    show(tab, {"chase": st("bad", "0 saved. Stopped waiting for you to sign in.")}, local=everything)
+    tab.click("#go")
+    tab.wait_for_function("__sent.length === 1")
+    assert tab.evaluate("__sent")[0]["sites"] == ["chase"]
+
+
+def test_when_nothing_is_due_get_new_has_nothing_to_run_and_says_why(tab):
+    everything = history(**{p: monthly(p, date(2026, 11, 1)) for p in SITES})
+    show(tab, local=everything)
+    assert tab.inner_text("#summary") == "Everything is up to date"
+    assert tab.is_disabled("#go") and tab.inner_text("#go") == "Get New Documents"
+    # Each site's own Run still runs it.
+    tab.click("button[aria-label='Run Chase']")
+    tab.wait_for_function("__sent.length === 1")
+    assert tab.evaluate("__sent") == [{"type": "sweep", "only": "chase"}]
+
+
+def test_after_a_run_a_site_left_out_says_it_is_not_due(tab):
+    show(tab, {"amex": st("ok", "1 new.")}, local=LATE)
+    got = {name: text for name, text, _ in whens(tab)}
+    assert got["Chase"] == "Not due yet · next around Nov 30"
+
+
+def test_tax_forms_in_season_are_said_and_run(tab):
+    forms = {"seen:coinbase": [f"{m}" for m in ("2026-12", "2026-11", "2026-10", "2026-09")] + ["tax-1099:2024"],
+             "dates:coinbase": {"tax-1099:2024": "2025-02-14"}, "tax:coinbase": ["tax-1099:2024"]}
+    show(tab, local=forms, today="2027-01-20T12:00:00")
+    got = {name: (text, need) for name, text, need in whens(tab)}
+    assert got["Coinbase"] == ("Up to date · next around Jan 31 · Tax forms expected now (2026)", "tax")
+    tab.click("#go")
+    tab.wait_for_function("__sent.length === 1")
+    assert "coinbase" in tab.evaluate("__sent")[0]["sites"]
+    show(tab, local=forms, today="2027-03-20T12:00:00")
+    assert "2026 tax forms not found yet" in {n: t for n, t, _ in whens(tab)}["Coinbase"]
+
+
+def test_only_the_sites_that_need_updating_start_ticked(tab):
+    show(tab, local=LATE)
+    ticked = {n for n, c in zip(tab.locator(".name").all_inner_texts(), [b.is_checked() for b in tab.locator("input[type=checkbox]").all()]) if c}
+    assert "Chase" not in ticked and {"American Express", "PayPal", "SDG&E"} <= ticked
+
+
+def test_ticking_an_up_to_date_site_adds_it_to_this_run(tab):
+    show(tab, local=LATE)
+    tab.locator("li:has(button[aria-label='Run Chase']) input[type=checkbox]").check()
+    tab.locator("li:has(button[aria-label='Run American Express']) input[type=checkbox]").uncheck()
+    assert tab.inner_text("#summary") == f"{len(SITES) - 1} sites ticked, {len(SITES) - 1} sites need updating"
+    tab.click("#go")
+    tab.wait_for_function("__sent.length === 1")
+    sites = tab.evaluate("__sent")[0]["sites"]
+    assert "chase" in sites and "amex" not in sites
+    assert tab.evaluate("window.__local.off || []") == []
+
+
+def test_ticks_start_afresh_each_time_it_opens(tab):
+    show(tab, local=LATE)
+    tab.locator("li:has(button[aria-label='Run American Express']) input[type=checkbox]").uncheck()
+    show(tab, local=LATE)
+    assert tab.locator("li:has(button[aria-label='Run American Express']) input[type=checkbox]").is_checked()
+
+
+def test_dismissing_a_possible_gap_stops_flagging_it(tab):
+    show(tab, local=LATE)
+    row = "li:has(button[aria-label='Run SDG&E'])"
+    assert tab.locator(f"{row} input[type=checkbox]").is_checked()
+    tab.click(f"{row} button.dismiss")
+    tab.wait_for_function("!document.querySelector(\"li:has(button[aria-label='Run SDG&E']) .when\").textContent.includes('gap')")
+    assert tab.inner_text(f"{row} .when") == "Up to date · next around Nov 28"
+    # It was ticked only for the gap, so it is unticked, and stays so next time.
+    assert not tab.locator(f"{row} input[type=checkbox]").is_checked()
+    assert tab.evaluate("window.__local['gapsOk:sdge']") == ["2026-02-28|2026-04-28"]
+    assert tab.locator(f"{row} button.dismiss").count() == 0
+
+
+def test_a_site_with_no_gap_has_nothing_to_dismiss(tab):
+    show(tab, local=LATE)
+    assert tab.locator("li:has(button[aria-label='Run Chase']) button.dismiss").count() == 0
+

@@ -9,5 +9,10 @@
   "pageFile": "providers/treasurydirect.page.js",
   "fileName": "{date} TreasuryDirect {title}.pdf",
   "family": "print",
-  "enabled": false
+  "guide": {
+    "signIn": [
+      "Sign in to TreasuryDirect here.",
+      "Stay on your Account Summary. Statement Sweep carries on in this tab."
+    ]
+  }
 }

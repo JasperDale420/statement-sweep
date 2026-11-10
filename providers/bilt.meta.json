@@ -8,5 +8,7 @@
   "pageFile": "providers/bilt.page.js",
   "fileName": "{date} Bilt Card Statement.pdf",
   "family": "click",
-  "enabled": false
+  "fileHosts": [
+    "statements.cardless.com"
+  ]
 }

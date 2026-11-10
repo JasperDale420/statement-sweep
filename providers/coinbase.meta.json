@@ -3,11 +3,15 @@
   "name": "Coinbase",
   "match": [
     "https://accounts.coinbase.com/*",
-    "https://www.coinbase.com/*"
+    "https://www.coinbase.com/*",
+    "https://tax-center-forms-production.s3.amazonaws.com/*"
+  ],
+  "fileHosts": [
+    "statements.cardless.com"
   ],
   "listUrl": "https://accounts.coinbase.com/statements",
   "pageFile": "providers/coinbase.page.js",
-  "fileName": "{date} Coinbase Monthly Statement.pdf",
+  "fileName": "{date} Coinbase {title}.pdf",
   "family": "click",
   "downloadWaitSeconds": 90
 }

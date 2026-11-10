@@ -1,5 +1,6 @@
 import { PROVIDERS } from "./providers/index.js";
 import { askFor, getFolder } from "./folders.js";
+import { gapKey, gapWords, keysFor, localIso, needsRun, rankOf, recordOf, siteStatus, stateOf, statusWords } from "./cadence.js";
 
 const go = document.getElementById("go");
 const scroll = document.getElementById("scroll");
@@ -25,17 +26,46 @@ function glyph(kind) {
 
 // Access to a chosen folder can lapse when Chrome restarts, and can only be
 // renewed from a press like this one. If it is refused, the sweep says so.
-async function start(only) {
+// One site (`only`), or the sites Get New Documents chose (`sites`).
+async function start(only, sites) {
   for (const name of ["destination", "inbox"]) {
     try {
       const handle = await getFolder(name);
       if (handle) await askFor(handle);
     } catch (e) { /* the sweep reports a folder it cannot use */ }
   }
-  chrome.runtime.sendMessage({ type: "sweep", only });
+  chrome.runtime.sendMessage(only ? { type: "sweep", only } : { type: "sweep", sites });
+}
+// Brings a site's tab, and its window, to the front. A tab closed meanwhile
+// has nothing to show; the engine takes the button away once it hears.
+async function showTab(tabId) {
+  try {
+    const tab = await chrome.tabs.update(tabId, { active: true });
+    await chrome.windows.update(tab.windowId, { focused: true });
+  } catch (e) { /* that tab is gone */ }
 }
 const busyIn = (board) => Object.values(board).some((s) => s.state === "working" || s.state === "needs_you");
 const count = (rows, pattern) => rows.reduce((sum, r) => sum + Number((pattern.exec(r.text) || [0, 0])[1]), 0);
+
+// Where each site stands, from the dates of what it has saved (cadence.js).
+let standing = {};
+let today = localIso();
+
+// The sites that need updating, as PaperPull's Get new for all chooses them:
+// every site not switched off in Settings that may have something new (due,
+// overdue, tax forms in season, a possible gap), that has too little history
+// to say, or whose last run stopped. A site that is up to date is left out.
+function targetsOf(board, off) {
+  return PROVIDERS.filter((p) => !off.includes(p.id)
+    && ((board[p.id] && board[p.id].state === "bad") || !standing[p.id] || needsRun(standing[p.id])))
+    .map((p) => p.id);
+}
+
+// What Get New Documents runs this time: the ticked sites. Each time the popup
+// opens they start as the sites that need updating; your ticks then last
+// until it closes, and are never saved. Switching a site off is in Settings.
+let picked = null;
+const pickedOf = (off) => PROVIDERS.filter((p) => picked && picked.has(p.id) && !off.includes(p.id)).map((p) => p.id);
 
 function say(board, off) {
   const rows = PROVIDERS.filter((p) => board[p.id]).map((p) => ({ name: p.name, ...board[p.id] }));
@@ -43,11 +73,21 @@ function say(board, off) {
   const [needs, working, stopped, done] = ["needs_you", "working", "bad", "ok"].map(inState);
   const fresh = count(done, /^(\d+) new\./) + count(stopped, /^(\d+) saved/);
   if (needs.length) return ["attention", needs.length === 1 ? `${needs[0].name} needs you` : `${needs.length} sites need you`];
-  if (working.length) return ["", `Working on ${working[0].name}…`];
+  if (working.length) return ["", working.length === 1 ? `Working on ${working[0].name}…` : `Working on ${working.length} sites…`];
   if (stopped.length) return ["stopped", `${fresh} new, ${stopped.length} stopped`];
   if (done.length) return ["", fresh ? `${fresh} new ${fresh === 1 ? "document" : "documents"}` : "Nothing new"];
-  const chosen = PROVIDERS.filter((p) => !off.includes(p.id)).length;
-  return ["", chosen ? `${chosen} of ${PROVIDERS.length} sites selected` : "No sites selected"];
+  const swept = PROVIDERS.filter((p) => !off.includes(p.id)).length;
+  if (!swept) return ["", "All sites are switched off in Settings"];
+  const needIds = targetsOf(board, off);
+  const tickedIds = pickedOf(off);
+  const need = needIds.length;
+  const ticked = tickedIds.length;
+  const sites = (n) => `${n} ${n === 1 ? "site" : "sites"}`;
+  if (!ticked) return ["", need ? `${sites(need)} need updating, none ticked` : "Everything is up to date"];
+  // As it opened: exactly the sites that need updating are ticked.
+  const asOpened = ticked === need && tickedIds.every((id) => needIds.includes(id));
+  if (asOpened) return ["", swept > need ? `${sites(need)} need updating, ${swept - need} up to date` : `${sites(need)} need updating`];
+  return ["", `${sites(ticked)} ticked, ${sites(need)} need updating`];
 }
 
 function drawHeader(board, off) {
@@ -56,25 +96,49 @@ function drawHeader(board, off) {
   summary.textContent = text;
   summary.dataset.kind = kind;
   go.textContent = busy ? "Working…" : "Get New Documents";
-  go.disabled = busy || PROVIDERS.every((p) => off.includes(p.id));
+  go.disabled = busy || !pickedOf(off).length;
 }
 
-function row(provider, status, off, busy, board) {
+// The site's own small logo, from Chrome's favicon cache: nothing is bundled
+// or fetched from the site. Decoration only, since the name beside it says
+// which site it is. A site Chrome has never shown gets Chrome's globe.
+function siteIcon(provider) {
+  const img = document.createElement("img");
+  img.className = "favicon";
+  img.alt = "";
+  img.setAttribute("aria-hidden", "true");
+  img.width = 16;
+  img.height = 16;
+  img.decoding = "async";
+  const url = new URL(chrome.runtime.getURL("/_favicon/"));
+  url.search = new URLSearchParams({ pageUrl: provider.listUrl, size: "32" }).toString();
+  img.src = url.href;
+  // Without the favicon permission yet (before the extension is reloaded), the
+  // space is kept and nothing broken is shown.
+  img.addEventListener("error", () => { img.style.visibility = "hidden"; });
+  return img;
+}
+
+function row(provider, status, off, busy, board, skipped) {
   const li = document.createElement("li");
   const label = document.createElement("label");
   const box = document.createElement("input");
   box.type = "checkbox";
-  box.checked = !off.includes(provider.id);
+  const switchedOff = off.includes(provider.id);
+  box.checked = !switchedOff && picked.has(provider.id);
+  box.disabled = switchedOff;
+  if (switchedOff) {
+    box.title = "Switched off in Settings";
+    li.classList.add("switched-off");
+  }
   box.dataset.focus = `box:${provider.id}`;
-  box.addEventListener("change", async () => {
-    const { off: now = [] } = await chrome.storage.local.get("off");
-    const next = box.checked ? now.filter((x) => x !== provider.id) : [...now, provider.id];
-    await chrome.storage.local.set({ off: next });
-    drawHeader(board, next);
+  box.addEventListener("change", () => {
+    if (box.checked) picked.add(provider.id); else picked.delete(provider.id);
+    drawHeader(board, off);
   });
   const name = document.createElement("span");
   name.className = "name";
-  name.textContent = provider.name;
+  name.append(siteIcon(provider), provider.name);
   label.append(box, name);
   li.append(label);
   if (status) {
@@ -93,6 +157,50 @@ function row(provider, status, off, busy, board) {
   one.append(glyph("run"));
   one.addEventListener("click", () => start(provider.id));
   li.append(one);
+  // A site whose tab is open, waiting for you, stopped or still going, can
+  // take you to it. Stays pressable while a run goes: that is when it is needed.
+  if (status && status.tab != null) {
+    li.classList.add("has-show");
+    const show = document.createElement("button");
+    show.className = "show";
+    show.type = "button";
+    show.textContent = "Show";
+    show.title = `Show ${provider.name}'s tab`;
+    show.setAttribute("aria-label", `Show ${provider.name}`);
+    show.dataset.focus = `show:${provider.id}`;
+    show.addEventListener("click", () => showTab(status.tab));
+    li.append(show);
+  }
+  // Where the site stands by its own history, in words, under its name.
+  const standingOf = standing[provider.id];
+  if (standingOf) {
+    const when = document.createElement("div");
+    when.className = "when";
+    when.dataset.need = stateOf(standingOf);
+    when.textContent = statusWords(standingOf, today, { skipped });
+    // A possible gap you know is expected can be dismissed: that window is not
+    // shown or counted again. A gap somewhere new still is.
+    if (standingOf.gaps.length) {
+      const dismiss = document.createElement("button");
+      dismiss.type = "button";
+      dismiss.className = "dismiss";
+      dismiss.textContent = "Dismiss";
+      const words = standingOf.gaps.map(gapWords).join(", ");
+      dismiss.setAttribute("aria-label", `Dismiss possible gap for ${provider.name}: ${words}`);
+      dismiss.title = "This gap is expected. Stop flagging it.";
+      dismiss.dataset.focus = `dismiss:${provider.id}`;
+      dismiss.addEventListener("click", async () => {
+        const key = `gapsOk:${provider.id}`;
+        const { [key]: kept = [] } = await chrome.storage.local.get(key);
+        await chrome.storage.local.set({ [key]: [...new Set([...kept, ...standingOf.gaps.map(gapKey)])] });
+        await draw();
+        // A site ticked only for that gap no longer needs updating: untick it now.
+        if (!needsRun(standing[provider.id]) && picked.delete(provider.id)) draw();
+      });
+      when.append(" ", dismiss);
+    }
+    li.append(when);
+  }
   if (status && status.text) {
     const text = document.createElement("div");
     text.className = "say";
@@ -104,15 +212,29 @@ function row(provider, status, off, busy, board) {
 
 async function draw() {
   const { board = {} } = await chrome.storage.session.get("board");
-  const { off = [] } = await chrome.storage.local.get("off");
+  const stored = await chrome.storage.local.get(["off", ...PROVIDERS.flatMap((p) => keysFor(p.id))]);
+  const off = stored.off || [];
+  today = localIso();
+  standing = Object.fromEntries(PROVIDERS.map((p) => [p.id, siteStatus(recordOf(stored, p.id), today)]));
   const busy = busyIn(board);
   const hasResults = Object.keys(board).length > 0;
+  // First draw after opening: tick the sites that need updating.
+  if (!picked) picked = new Set(targetsOf(board, off));
   drawHeader(board, off);
+  // Within each run state, what needs you first, as PaperPull's home page
+  // lists it: late, then tax forms and gaps, then too little history, then
+  // up to date; the longest waiting first, then the site list's own order.
+  // A site switched off in Settings goes last: it will not run, whatever its need.
+  const order = (p) => [off.includes(p.id) ? 1 : 0, rankOf(standing[p.id]), -(standing[p.id].ageDays || 0), PROVIDERS.indexOf(p)];
+  const byNeed = (a, b) => {
+    const [x, y] = [order(a), order(b)];
+    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || x[3] - y[3];
+  };
   // A redraw must not take the keyboard or the scroll position away from you.
   const kept = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.focus : "";
   const top = scroll.scrollTop;
   scroll.replaceChildren(...SECTIONS.flatMap(([state, title]) => {
-    const members = PROVIDERS.filter((p) => (board[p.id] ? board[p.id].state : "") === state);
+    const members = PROVIDERS.filter((p) => (board[p.id] ? board[p.id].state : "") === state).sort(byNeed);
     if (!members.length) return [];
     const section = document.createElement("section");
     section.dataset.state = state;
@@ -121,7 +243,9 @@ async function draw() {
     heading.textContent = state === "" && hasResults ? "Not Run Yet" : title;
     const list = document.createElement("ul");
     list.setAttribute("aria-labelledby", heading.id);
-    list.append(...members.map((p) => row(p, board[p.id], off, busy, board)));
+    // After a run, a ticked site that was left out for being up to date says so.
+    const skipped = (p) => hasResults && !board[p.id] && !off.includes(p.id) && !needsRun(standing[p.id]);
+    list.append(...members.map((p) => row(p, board[p.id], off, busy, board, skipped(p))));
     section.append(heading, list);
     return [section];
   }));
@@ -132,7 +256,12 @@ async function draw() {
   }
 }
 
-go.addEventListener("click", () => start());
+go.addEventListener("click", async () => {
+  const { board = {} } = await chrome.storage.session.get("board");
+  const { off = [] } = await chrome.storage.local.get("off");
+  const sites = pickedOf(off);
+  if (sites.length) start(undefined, sites);
+});
 document.getElementById("settings").addEventListener("click", () => chrome.runtime.openOptionsPage());
 chrome.runtime.onMessage.addListener((m) => { if (m.type === "board") draw(); });
 draw();
