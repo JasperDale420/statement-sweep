@@ -46,6 +46,24 @@
   .when .dismiss { all: unset; cursor: default; color: var(--accent-ink); font-weight: 500; white-space: nowrap; border-radius: 4px; }
   .when .dismiss:hover { text-decoration: underline; }
   .when .dismiss:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* Card offers: their own line under the statements' words, and a link to
+     the Card Offers page with where they stand. */
+  .offers-line { grid-column: 2 / 5; margin: 1px 6px 2px 23px; color: var(--secondary); font-size: 12px; line-height: 16px; font-weight: 500; overflow-wrap: anywhere; text-wrap: pretty; }
+  li.has-show .offers-line, li.has-show .pill { grid-column: 2 / 6; }
+  .offers-line[data-kind=adding] { color: var(--ink); }
+  .offers-line[data-kind=done], .offers-line[data-kind=capped] { color: var(--accent-ink); }
+  .offers-line[data-kind=stopped] { color: var(--orange); }
+  .pill { grid-column: 2 / 5; justify-self: start; display: inline-flex; align-items: center; gap: 6px; min-height: 24px; margin: 2px 6px 3px 23px; padding: 0 8px; border-radius: 6px; background: var(--hover); color: var(--accent-ink); font-size: 12px; line-height: 16px; font-weight: 500; text-decoration: none; }
+  .pill svg { flex: none; width: 14px; height: 14px; }
+  .pill:hover { background: var(--press); }
+  .pill[data-kind=need] { background: var(--orange-tint); color: var(--orange); box-shadow: 0 0 0 .5px var(--orange-line); }
+  .pill[data-kind=off] { min-height: 20px; padding: 0; background: none; }
+  .pill[data-kind=off]:hover { text-decoration: underline; }
+  footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--separator); font-size: 12px; line-height: 16px; }
+  footer span { color: var(--secondary); }
+  footer a { color: var(--accent-ink); font-weight: 500; text-decoration: none; border-radius: 4px; }
+  footer a:hover { text-decoration: underline; }
+  [hidden] { display: none !important; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style></head>
 <body>
@@ -58,5 +76,9 @@
     <button class="primary" id="go" type="button">Get New Documents</button>
   </header>
   <main id="scroll" tabindex="-1"></main>
+  <footer id="offersFoot" hidden>
+    <span id="offersOnCount"></span>
+    <a id="offersLink" href="offers.html" target="_blank">Card Offers</a>
+  </footer>
   <script src="popup.js" type="module"></script>
 </body></html>

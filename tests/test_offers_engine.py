@@ -100,10 +100,10 @@ def adds_in(got):
 def test_offers_not_yet_added_are_added_and_kept(tab):
     got = run(tab, [ok(offer(1), offer(2), offer(3, added=True))])
     assert adds_in(got) == ["1111:o1", "1111:o2"]
-    assert got["words"] == {"text": "Added 2 offers · 1 already on your card.", "stopped": False}
+    assert got["words"] == {"kind": "done", "text": "Added 2 offers · 1 already on your card.", "stopped": False}
     # What the sweep added is kept apart from what the site already showed as added.
     assert got["local"]["offers:site"] == {"added": ["1111:o1", "1111:o2"], "seen": ["1111:o3"], "left": []}
-    assert got["said"][0].startswith("Adding offers")
+    assert got["said"] == ["Adding offers · 1 of 2 on Card ·· 1111", "Adding offers · 2 of 2 on Card ·· 1111"]
 
 
 def test_the_recipe_files_are_loaded_after_the_shared_ones(tab):
@@ -138,13 +138,13 @@ def test_the_sites_own_count_of_added_offers_is_used(tab):
 
 
 def test_nothing_to_add_says_so(tab):
-    assert run(tab, [ok()])["words"] == {"text": "No new offers.", "stopped": False}
+    assert run(tab, [ok()])["words"] == {"kind": "done", "text": "No new offers.", "stopped": False}
 
 
 def test_presses_stop_at_a_careful_cap_and_the_rest_wait(tab):
     got = run(tab, [ok(*[offer(i) for i in range(40)])])
     assert len(adds_in(got)) == 25
-    assert got["words"] == {"text": "Added 25 offers. Stopped at 25 offers for this sync. The rest are added next time.", "stopped": False}
+    assert got["words"] == {"kind": "capped", "text": "25 offers added · 15 wait for the next sync", "stopped": False}
     # The next sync goes on with the rest, and with the cap again.
     again = run(tab, [ok(*[offer(i) for i in range(40)])])
     assert adds_in(again) == [f"1111:o{i}" for i in range(25, 40)]
@@ -181,32 +181,32 @@ def test_a_tab_of_yours_is_never_used(tab):
 def test_a_sign_out_while_adding_stops_the_offers(tab):
     got = run(tab, [ok(offer(1), offer(2), offer(3))], adds={"1111:o2": {"ok": False, "state": "signed_out"}})
     assert adds_in(got) == ["1111:o1", "1111:o2"]
-    assert got["words"] == {"text": "Added 1 offer. Offers stopped: Example Card signed you out.", "stopped": True}
+    assert got["words"] == {"kind": "stopped", "text": "Offers stopped: Example Card signed you out. 1 added before that.", "stopped": True}
 
 
 def test_a_check_on_the_offers_page_stops_before_any_press(tab):
     got = run(tab, [{"state": "challenge"}])
     assert adds_in(got) == []
-    assert got["words"] == {"text": "Offers stopped: Example Card asked you to confirm something.", "stopped": True}
+    assert got["words"] == {"kind": "stopped", "text": "Offers stopped: Example Card asked you to confirm it is you.", "stopped": True}
 
 
 def test_a_sign_out_on_the_offers_page_stops_before_any_press(tab):
     got = run(tab, [{"state": "signed_out"}, ok(offer(1))])
     assert adds_in(got) == [] and [e for e in got["log"] if e[0] == "load"] == []
-    assert got["words"] == {"text": "Offers stopped: Example Card signed you out.", "stopped": True}
+    assert got["words"] == {"kind": "stopped", "text": "Offers stopped: Example Card signed you out.", "stopped": True}
 
 
 def test_a_check_while_adding_stops_at_once(tab):
     got = run(tab, [ok(offer(1), offer(2), offer(3))], adds={"1111:o1": {"ok": False, "state": "challenge"}})
     assert adds_in(got) == ["1111:o1"]
-    assert got["words"]["text"] == "Offers stopped: Example Card asked you to confirm something."
+    assert got["words"]["text"] == "Offers stopped: Example Card asked you to confirm it is you."
     assert "offers:site" not in got["local"]
 
 
 def test_a_check_after_a_card_switch_stops_before_the_next_card(tab):
     got = run(tab, [ok(offer(1), more=True), {"state": "challenge"}], nexts=[{"moved": True}])
     assert adds_in(got) == ["1111:o1"]
-    assert got["words"]["text"] == "Added 1 offer. Offers stopped: Example Card asked you to confirm something."
+    assert got["words"]["text"] == "Offers stopped: Example Card asked you to confirm it is you. 1 added before that."
 
 
 def test_three_failures_in_a_row_stop(tab):
@@ -247,7 +247,7 @@ def test_each_card_in_turn(tab):
 
 def test_a_card_switch_that_fails_says_why(tab):
     got = run(tab, [ok(offer(1), more=True)], nexts=[{"why": "Amex did not change to the card chosen."}])
-    assert got["words"] == {"text": "Added 1 offer. Offers stopped: Amex did not change to the card chosen.", "stopped": True}
+    assert got["words"] == {"kind": "stopped", "text": "Offers stopped: Amex did not change to the card chosen. 1 added before that.", "stopped": True}
 
 
 def test_cards_of_the_other_kind_only(tab):
@@ -278,7 +278,7 @@ def test_an_offers_address_off_the_site_is_never_loaded(tab):
     provider = dict(PROVIDER, offers={"file": "providers/site.offers.js", "url": "https://example.com/offers"})
     got = run(tab, [{"state": "no_list"}] * 6, provider=provider)
     assert [e for e in got["log"] if e[0] == "load"] == []
-    assert got["words"] == {"text": "Offers stopped: Example Card's offers page could not be found.", "stopped": True}
+    assert got["words"] == {"kind": "stopped", "text": "Offers stopped: Example Card's offers page could not be found.", "stopped": True}
 
 
 def test_a_tab_that_left_the_site_presses_nothing(tab):
@@ -293,3 +293,103 @@ def test_offers_are_wanted_only_when_turned_on_for_the_site(tab):
     assert tab.evaluate(wanted, [PROVIDER, []]) is False
     assert tab.evaluate(wanted, [PROVIDER, ["site"]]) is True
     assert tab.evaluate(wanted, [{"id": "site", "name": "No offers"}, ["site"]]) is False
+
+
+# -- the details record, for the Card Offers page ------------------------------
+
+def dated(i, expires, added=False, card="1111"):
+    return dict(offer(i, added, card), expires=expires)
+
+
+def test_what_each_card_showed_is_kept_with_its_words_and_status(tab):
+    got = run(tab, [ok(dated(1, "2099-03-01"), offer(2), offer(3, added=True), cardName="Invented Gold Card")],
+              adds={"1111:o2": {"ok": False, "left": True, "why": "The site asked you to enroll first."}})
+    today = tab.evaluate("(async () => (await import('/cadence.js')).localIso())()")
+    record = got["local"]["offerDetails:site"]
+    card = record["cards"]["1111"]
+    assert record["at"] > 0 and card["at"] > 0
+    assert card["label"] == "Invented Gold Card ·· 1111"
+    assert card["offers"] == [
+        {"id": "1111:o1", "merchant": "Shop 1", "title": "Earn 1% back", "expires": "2099-03-01", "status": "added", "on": today},
+        {"id": "1111:o2", "merchant": "Shop 2", "title": "Earn 2% back", "expires": None, "status": "needs_you", "why": "The site asked you to enroll first."},
+        {"id": "1111:o3", "merchant": "Shop 3", "title": "Earn 3% back", "expires": None, "status": "on_card"},
+    ]
+    # The record of ids is kept as before, beside it.
+    assert got["local"]["offers:site"] == {"added": ["1111:o1"], "seen": ["1111:o3"], "left": ["1111:o2"]}
+
+
+def test_a_card_label_never_holds_more_than_its_last_four_digits(tab):
+    got = tab.evaluate("""async () => { const m = await import('/offers.js');
+      return [m.cardLabel('123456'), m.cardLabel('a1234', 'INVENTED REWARDS (...1234)'), m.cardLabel('card'), m.cardLabel('11111', 'Card 99887766')]; }""")
+    assert got == ["Card ·· 3456", "Invented Rewards ·· 1234", "Card", "Card ·· 1111"]
+
+
+def test_an_offer_past_its_end_drops_off(tab):
+    old = {"at": 1, "cards": {"2222": {"label": "Card ·· 2222", "at": 1, "offers": [
+        {"id": "2222:old", "merchant": "Gone Shop", "title": "Ended", "expires": "2020-01-01", "status": "waiting"},
+        {"id": "2222:live", "merchant": "Still Shop", "title": "Going", "expires": "2099-01-01", "status": "waiting"}]}}}
+    got = run(tab, [ok(dated(1, "2020-05-05"), dated(2, "2099-05-05"))], local={"offerDetails:site": old})
+    cards = got["local"]["offerDetails:site"]["cards"]
+    assert [o["id"] for o in cards["1111"]["offers"]] == ["1111:o2"]
+    # A card not read this time keeps what it showed, less what has ended.
+    assert [o["id"] for o in cards["2222"]["offers"]] == ["2222:live"]
+
+
+def test_a_record_from_before_details_were_kept_still_counts(tab):
+    kept = {"offers:site": {"added": ["1111:o1"], "seen": ["1111:o2"], "left": ["1111:o3"]}}
+    got = run(tab, [ok(offer(1), offer(2), offer(3), offer(4))], local=kept)
+    assert adds_in(got) == ["1111:o4"]
+    statuses = {o["id"]: (o["status"], o.get("on"), o.get("why")) for o in got["local"]["offerDetails:site"]["cards"]["1111"]["offers"]}
+    assert statuses["1111:o1"] == ("added", None, None)
+    assert statuses["1111:o2"] == ("on_card", None, None)
+    assert statuses["1111:o3"] == ("needs_you", None, "The site asked for more before adding it.")
+    assert statuses["1111:o4"][0] == "added"
+    assert got["local"]["offers:site"]["added"] == ["1111:o1", "1111:o4"]
+
+
+def test_a_broken_details_record_is_read_as_empty_not_trusted(tab):
+    got = tab.evaluate("""async () => { const m = await import('/offers.js');
+      return [m.liveDetails(undefined), m.liveDetails('x'), m.liveDetails({ at: 5, cards: { a: { offers: [null, { id: 'x', status: 'bought' }, { id: 'y', status: 'waiting' }] }, b: { offers: 'no' } } })]; }""")
+    assert got[0] == {"at": 0, "cards": {}} and got[1] == {"at": 0, "cards": {}}
+    assert got[2] == {"at": 5, "cards": {"a": {"label": "Card", "at": 0, "offers": [{"id": "y", "status": "waiting"}]}}}
+
+
+def test_the_record_never_reaches_the_log(tab):
+    got = run(tab, [ok(dated(1, "2099-03-01"), cardName="Invented Gold Card")])
+    lines = " ".join(e[2] for e in got["log"] if e[0] == "log")
+    assert "Shop" not in lines and "Earn" not in lines and "Gold" not in lines and "2099" not in lines
+
+
+# -- which offers, and how many --------------------------------------------------
+
+def test_the_soonest_to_end_are_pressed_first_and_those_with_no_end_last(tab):
+    got = run(tab, [ok(dated(1, "2099-12-01"), offer(2), dated(3, "2099-01-15"), dated(4, "2099-06-30"), offer(5))])
+    assert adds_in(got) == ["1111:o3", "1111:o4", "1111:o1", "1111:o2", "1111:o5"]
+
+
+def test_under_the_cap_the_soonest_to_end_are_the_ones_added(tab):
+    offers = [dated(i, f"2099-{12 - (i % 12):02d}-01") for i in range(30)]
+    got = run(tab, [ok(*offers)], local={"offersCap": 10})
+    pressed = adds_in(got)
+    ends = sorted(o["expires"] for o in offers)
+    assert len(pressed) == 10
+    assert sorted(o["expires"] for o in offers if o["id"] in pressed) == ends[:10]
+
+
+def test_the_cap_is_the_one_chosen_in_settings(tab):
+    got = run(tab, [ok(*[offer(i) for i in range(15)])], local={"offersCap": 10})
+    assert len(adds_in(got)) == 10
+    assert got["words"] == {"kind": "capped", "text": "10 offers added · 5 wait for the next sync", "stopped": False}
+    assert got["said"][0] == "Adding offers · 1 of 10 on Card ·· 1111"
+
+
+def test_a_cap_that_is_not_a_choice_is_never_more_than_25(tab):
+    got = run(tab, [ok(*[offer(i) for i in range(40)])], local={"offersCap": 400})
+    assert len(adds_in(got)) == 25
+    choices = tab.evaluate("async () => { const m = await import('/offers.js'); return [m.CAP_CHOICES, m.MAX_PRESSES]; }")
+    assert choices == [[10, 25], 25]
+
+
+def test_capped_with_another_card_to_come_says_there_may_be_more(tab):
+    got = run(tab, [ok(*[offer(i) for i in range(12)], more=True)], local={"offersCap": 10})
+    assert got["words"]["text"] == "10 offers added · 2 or more wait for the next sync"

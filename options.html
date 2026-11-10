@@ -48,7 +48,16 @@
   #sitesStatus:empty { display: none; }
   #offersStatus { margin: 6px 14px 0; color: var(--green); font-size: 12px; line-height: 16px; font-weight: 500; text-wrap: pretty; }
   #offersStatus:empty { display: none; }
-  #offersSites { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 16px; }
+  #offersSites { display: flex; flex-direction: column; min-width: 0; }
+  .offer-site { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+  .offer-site + .offer-site { border-top: 1px solid var(--separator); }
+  .offer-site input { width: 14px; height: 14px; min-height: 0; margin: 0; padding: 0; }
+  .offer-site label { flex: 1; }
+  .offer-site label span, .offer-site > span { color: var(--secondary); }
+  .offer-site > span { font-size: 12px; }
+  #offersCap { width: fit-content; }
+  a.secondary { display: inline-flex; align-items: center; color: var(--ink); text-decoration: none; }
+  #offersSeen { font-weight: 400; }
   #sitesList { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 16px; }
   .choice > .pair { display: flex; flex-wrap: wrap; gap: 8px; margin-right: 0; }
   #importRow { align-items: start; }
@@ -172,9 +181,22 @@
   <div class="group" id="offersGroup">
     <div class="row">
       <span id="offersLabel">Add When Syncing</span>
-      <div class="plan" id="offersSites" role="group" aria-labelledby="offersLabel"></div>
-      <p class="hint">Off unless you turn it on for a site. After that site's statements are saved, Statement Sweep opens its card offers in the same tab and presses each offer's own add control, nothing else. It never buys, applies, enrolls or accepts terms, and an offer it has added is never pressed again. For Chase, personal cards and business cards are kept apart.</p>
+      <div id="offersSites" role="group" aria-labelledby="offersLabel"></div>
+      <p class="hint">Off unless you turn it on. After a site's statements are saved, Statement Sweep opens its card offers in the same tab and presses each offer's own add button, nothing else. It never buys, applies, enrolls or accepts terms.</p>
+    </div>
+    <div class="row">
+      <label for="offersCap">Each Sync</label>
+      <select id="offersCap"></select>
       <p class="hint" id="offersPace"></p>
+    </div>
+    <div class="row">
+      <span>Offers Seen</span>
+      <div class="choice">
+        <span id="offersSeen"></span>
+        <a class="secondary" id="openOffers" href="offers.html" target="_blank">Open Card Offers</a>
+        <button class="secondary" id="forgetOffers" type="button">Forget Offers…</button>
+      </div>
+      <p class="hint">Forgetting clears this list. Offers already on your cards stay on them, and none is pressed twice: each site shows them as added.</p>
     </div>
   </div>
   <p id="offersStatus" role="status"></p>
