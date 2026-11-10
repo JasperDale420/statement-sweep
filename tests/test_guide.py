@@ -218,7 +218,9 @@ LOGS = """async () => {
   const out = {};
   async function walk(d, p) { for await (const [n, h] of d.entries()) {
     if (h.kind === 'directory') await walk(h, p + n + '/');
-    else out[p + n] = await (await h.getFile()).text(); } }
+    // A log being written again can be gone between listing and reading; the
+    // next poll reads it.
+    else { try { out[p + n] = await (await h.getFile()).text(); } catch (e) { if (e.name !== 'NotFoundError') throw e; } } } }
   await walk(await navigator.storage.getDirectory(), '');
   return Object.entries(out).filter(([k]) => /Fake Bank\\/Logs\\/run-/.test(k)).map(([, v]) => v).join('');
 }"""

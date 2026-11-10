@@ -1,0 +1,33 @@
+name: A site broke
+description: A site stopped saving, saved the wrong thing, or left a tab open.
+labels: [site]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please never attach a statement, a screenshot showing account details, or anything with your sign-in in it.
+  - type: dropdown
+    id: site
+    attributes:
+      label: Which site
+      options: ["Alpaca", "American Express", "Apple", "Apple Card", "Bilt Card", "Charles Schwab", "Chase", "Chase Business", "Coinbase", "Fidelity", "Fidelity NetBenefits", "First Horizon Bank", "Interactive Brokers", "IRS", "Nelnet", "Optum Bank", "PayPal", "Robinhood", "SDG&E", "Shelby County Trustee", "Simmons Bank", "Spectrum", "State Farm", "TreasuryDirect", "Venmo", "Wealthfront", "Other"]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What the popup said for that site, and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: The site's log
+      description: Settings → Run Logs → Export Logs, then paste that site's lines. Long numbers are already cut to their last 4 digits; check before pasting.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: From chrome://extensions

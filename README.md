@@ -1,5 +1,8 @@
 # Statement Sweep
 
+[![CI](https://github.com/JasperDale420/statement-sweep/actions/workflows/ci.yml/badge.svg)](https://github.com/JasperDale420/statement-sweep/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+
 A Chrome extension that saves your own official statements from sites you
 sign in to. It uses your browser and your password manager, opens no extra
 browsers, stores no passwords, and sends nothing anywhere.
@@ -9,7 +12,7 @@ Credit for the idea and the site-by-site work behind these recipes belongs to
 its authors. Statement Sweep is an independent project, not made or endorsed by
 PaperPull or TNE Enterprises LLC. See [NOTICE.md](NOTICE.md).
 
-17 sites are switched on. Each is a recipe in `providers/`; see
+25 sites are switched on. Each is a recipe in `providers/`; see
 [providers/README.md](providers/README.md) to write one.
 
 ## Try it
@@ -29,5 +32,15 @@ Nothing leaves your browser. See the [privacy policy](PRIVACY.md).
 
 ## Develop
 
-`python3 tools/build.py` regenerates the site list. `pytest tests` needs
-Playwright. `python3 tools/package.py` makes the Chrome Web Store upload.
+```bash
+pip install -r requirements-dev.txt && python -m playwright install chromium
+python3 tools/build.py          # regenerate the site list after editing a *.meta.json
+python3 tools/privacy_check.py  # nothing personal in the repository
+python -m pytest -n auto --dist loadfile
+python3 tools/package.py        # the Chrome Web Store upload
+```
+
+Each site is tested in a real Chromium against stand-in pages. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request: its safety
+rules come first. Security problems go privately, as [SECURITY.md](SECURITY.md)
+says. Changes are listed in [CHANGELOG.md](CHANGELOG.md).

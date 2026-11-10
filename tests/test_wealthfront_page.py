@@ -8,8 +8,8 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 HOST = "https://www.wealthfront.com"
 PAGE = "/documents"
-STATEMENT = "/documents/87543673/document/DOCD-AA18"
-FORM = "/documents/87543673/2025/FORM_1099_PDF?idx=0"
+STATEMENT = "/documents/90000017/document/DOCD-AA18"
+FORM = "/documents/90000017/2025/FORM_1099_PDF?idx=0"
 
 
 def dated(date="12/31/2025", title="Monthly Statement for Joint Cash Account (from Wealthfront Brokerage Corp)", href=STATEMENT):
@@ -31,7 +31,7 @@ def page_body(rows, menu=year_menu("2025"), older=""):
   if (e.target.matches('[data-testid=tax-forms-account-view-dialog-trigger]')) {
     window.__pressed = (window.__pressed || 0) + 1;
     const d = document.createElement('div'); d.setAttribute('role', 'dialog');
-    d.innerHTML = window.__links || '<a href="/documents/87543673/2025/FORM_1099_PDF?idx=0">PDF</a>';
+    d.innerHTML = window.__links || '<a href="/documents/90000017/2025/FORM_1099_PDF?idx=0">PDF</a>';
     d.insertAdjacentHTML('beforeend', '<button data-testid="dismiss-dialog">Close</button>');
     document.body.append(d);
   }
@@ -230,7 +230,7 @@ function dated(p) {
 function draw() {
   const opts = Object.keys(forms).sort().reverse().map(y => `<option ${y === year ? 'selected' : ''}>Tax Year: ${y}</option>`).join('');
   const tax = forms[year].map(f => `<tr><td>Joint Cash Account</td><td>${f}</td><td><button data-testid="tax-forms-account-view-dialog-trigger">Download</button></td></tr>`).join('');
-  const rows = dated(page).map((d, i) => `<tr><td>${d}</td><td>Monthly Statement for Joint Cash Account</td><td><a href="/documents/87543673/document/S-${d.replace(/\\//g, '')}">Link</a></td></tr>`).join('');
+  const rows = dated(page).map((d, i) => `<tr><td>${d}</td><td>Monthly Statement for Joint Cash Account</td><td><a href="/documents/90000017/document/S-${d.replace(/\\//g, '')}">Link</a></td></tr>`).join('');
   const last = !q.includes('endless') && page >= pages.length - 1;
   document.getElementById('m').innerHTML = `<select aria-label="tax year">${opts}</select><table><tbody>${tax}</tbody></table>`
     + `<table><tbody>${rows}</tbody></table><button id="newer">Newer</button><button id="older" ${last ? 'disabled' : ''}>Older</button>`;
@@ -247,7 +247,7 @@ document.addEventListener('click', (e) => {
   if (e.target.id === 'newer') moves.push('newer');
   if (e.target.matches('[data-testid=tax-forms-account-view-dialog-trigger]')) {
     const d = document.createElement('div'); d.setAttribute('role', 'dialog');
-    d.innerHTML = window.__links || `<a href="/documents/87543673/${year}/FORM_1099_PDF?idx=0">PDF</a><button data-testid="dismiss-dialog">Close</button>`;
+    d.innerHTML = window.__links || `<a href="/documents/90000017/${year}/FORM_1099_PDF?idx=0">PDF</a><button data-testid="dismiss-dialog">Close</button>`;
     document.body.append(d);
   }
   if (e.target.matches('[data-testid=dismiss-dialog]')) e.target.closest('[role=dialog]').remove();
@@ -292,7 +292,7 @@ def walk_everything(tab, limit=50):
 
 
 def s(date):
-    return "/documents/87543673/document/S-" + date.replace("/", "")
+    return "/documents/90000017/document/S-" + date.replace("/", "")
 
 
 EVERY = [
@@ -336,7 +336,7 @@ def test_without_walk_nothing_on_the_page_is_changed(tab):
 
 def test_a_tax_form_of_a_walked_year_is_taken_from_that_years_dialog(tab):
     data = b"%PDF-1.7 the 2024 form"
-    load_world(tab, files={"/documents/87543673/2024/FORM_1099_PDF?idx=0": dict(status=200, content_type="application/pdf", body=data)})
+    load_world(tab, files={"/documents/90000017/2024/FORM_1099_PDF?idx=0": dict(status=200, content_type="application/pdf", body=data)})
     tab.evaluate("__sweep.readList({ walk: true })")
     assert tab.evaluate("__sweep.nextView()") == {"moved": True}
     doc = next(d for d in tab.evaluate("__sweep.readList({ walk: true })")["docs"] if d.get("year") == "2024")
@@ -349,7 +349,7 @@ def test_a_dialog_link_for_another_year_is_refused(tab):
     tab.evaluate("__sweep.readList({ walk: true })")
     tab.evaluate("__sweep.nextView()")
     doc = next(d for d in tab.evaluate("__sweep.readList({ walk: true })")["docs"] if d.get("year") == "2024")
-    tab.evaluate("window.__links = '<a href=\"/documents/87543673/2025/FORM_1099_PDF?idx=0\">PDF</a><button data-testid=\"dismiss-dialog\">x</button>'")
+    tab.evaluate("window.__links = '<a href=\"/documents/90000017/2025/FORM_1099_PDF?idx=0\">PDF</a><button data-testid=\"dismiss-dialog\">x</button>'")
     got = fetch(tab, doc)
     assert got["ok"] is False and "2025" in got["why"]
 
@@ -444,7 +444,7 @@ function draw() {
   const rows = list.slice(page * 2, page * 2 + 2).map(([t, a, d]) => {
     const what = t === 'Trade Confirmations' ? 'Trade Confirmation' : t === 'Quarterly Statements' ? 'Quarterly Statement' : 'Monthly Statement';
     const id = `${a.split(' ')[0]}-${d.replace(/\\//g, '')}`;
-    return `<tr><td>${d}</td><td>${what} for ${a}</td><td><a href="/documents/87543673/document/S-${id}">Link</a></td></tr>`;
+    return `<tr><td>${d}</td><td>${what} for ${a}</td><td><a href="/documents/90000017/document/S-${id}">Link</a></td></tr>`;
   }).join('');
   const last = page * 2 + 2 >= list.length;
   const tax = forms[year].map(f => `<tr><td>Joint Cash Account</td><td>${f}</td><td><button data-testid="tax-forms-account-view-dialog-trigger">Download</button></td></tr>`).join('');
@@ -486,7 +486,7 @@ def load_filtered(tab, query=""):
 
 
 def f(account, date):
-    return "/documents/87543673/document/S-" + account.split(" ")[0] + "-" + date.replace("/", "")
+    return "/documents/90000017/document/S-" + account.split(" ")[0] + "-" + date.replace("/", "")
 
 
 EVERY_STATEMENT = [f("Joint Cash Account", "12/31/2025"), f("Joint Cash Account", "11/30/2025"), f("Joint Cash Account", "10/31/2025"),
