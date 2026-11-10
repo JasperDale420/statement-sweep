@@ -8,6 +8,11 @@
   "pageFile": "providers/chase.page.js",
   "fileName": "{date} Chase {title} Statement.pdf",
   "family": "click",
+  "offers": {
+    "file": "providers/chase.offers.js",
+    "url": "https://secure.chase.com/web/auth/dashboard#/dashboard/merchantOffers/offer-hub",
+    "cards": "personal"
+  },
   "guide": {
     "signIn": [
       "Sign in to Chase here.",

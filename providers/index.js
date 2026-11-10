@@ -23,6 +23,9 @@ export const PROVIDERS = [
     "pageFile": "providers/amex.page.js",
     "fileName": "{date} American Express {title}.pdf",
     "family": "click",
+    "offers": {
+      "file": "providers/amex.offers.js"
+    },
     "downloadWaitSeconds": 90
   },
   {
@@ -86,6 +89,11 @@ export const PROVIDERS = [
     "pageFile": "providers/chase.page.js",
     "fileName": "{date} Chase {title} Statement.pdf",
     "family": "click",
+    "offers": {
+      "file": "providers/chase.offers.js",
+      "url": "https://secure.chase.com/web/auth/dashboard#/dashboard/merchantOffers/offer-hub",
+      "cards": "personal"
+    },
     "guide": {
       "signIn": [
         "Sign in to Chase here.",
@@ -103,6 +111,11 @@ export const PROVIDERS = [
     "pageFile": "providers/chasebusiness.page.js",
     "fileName": "{date} Chase {title} Statement.pdf",
     "family": "click",
+    "offers": {
+      "file": "providers/chase.offers.js",
+      "url": "https://secure.chase.com/web/auth/dashboard#/dashboard/merchantOffers/offer-hub",
+      "cards": "business"
+    },
     "downloadWaitSeconds": 60
   },
   {

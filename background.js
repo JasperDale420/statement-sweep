@@ -7,6 +7,7 @@ import { makeCapture } from "./capture.js";
 import { INBOX, getFolder, isGranted, moveFromInbox, withinChosen, writeFile } from "./folders.js";
 import { backfillFor, documentDate, isDue, isTaxDocument, keysFor, localIso, recordOf, siteStatus } from "./cadence.js";
 import { amount, cleanUrl, errorText, makeLogs } from "./log.js";
+import { hasOffers, makeOffers, offersWanted, offersWords } from "./offers.js";
 
 // The run's logs (log.js): what each site did and why it stopped, written to
 // each site's Logs folder as the run goes. `note` adds one line for a site.
@@ -667,6 +668,9 @@ const capture = makeCapture({
   isOurs: async (tabId) => (await ourTabs()).has(tabId),
   log: note,
 });
+// Card offers (offers.js), after a site's statements, only where you turned
+// them on in Settings.
+const offers = makeOffers({ loaded, tabChange, onHost, log: (provider, text) => note(provider, `offers: ${text}`) });
 // Through the one chain, since sites open their tabs at the same time.
 const markOurs = (tabId, mine, site) => serially(async () => {
   const tabs = await ourTabs();
@@ -917,6 +921,26 @@ async function sweep(provider, together = false) {
     if (next.note) notes.push(next.note);
     if (!next.moved) break;
   }
+  // Card offers, when you turned them on for this site, in the same tab and
+  // sign-in, once every statement it found is saved: a statement that did
+  // not save keeps the tab on its list for the next run. What the offers did
+  // is only ever a note on the line; it never changes how the site stands.
+  let offered = "";
+  if (hasOffers(provider) && (await offersWanted(provider))) {
+    if (failed) {
+      offered = "Card offers wait until every statement here has saved.";
+    } else {
+      await say(provider.id, "working", "Looking at card offers…");
+      const sum = await timed(provider, "offers", () => offers.run(tab.id, provider, {
+        ours, progress: (text) => say(provider.id, "working", text),
+      })).catch((e) => {
+        logs.error(provider, "adding card offers", e);
+        return { added: 0, already: 0, why: tabGone(e) ? `${provider.name}'s tab closed.` : "That did not finish." };
+      });
+      offered = offersWords(sum).text;
+      note(provider, `Offers: ${sum.added || 0} added, ${sum.left || 0} left, ${sum.failed || 0} not added${sum.capped ? ", stopped at the cap" : ""}${sum.why ? `, stopped: ${sum.why}` : ""}.`);
+    }
+  }
   if (failed) {
     const other = count ? (failed === 1 ? " other" : " others") : "";
     const them = `${failed}${other} did not save and ${failed === 1 ? "is" : "are"}`;
@@ -924,14 +948,14 @@ async function sweep(provider, together = false) {
     const [state, head] = count ? ["ok", `${count} new.`] : ["bad", "0 saved."];
     // The sweep's own tab stays open on the documents that did not save.
     if (!ours) tabFor.delete(provider.id);
-    return say(provider.id, state, [`${head} ${them} tried again next time. ${lastWhy}`.trim(), ...new Set(notes)].join(" "));
+    return say(provider.id, state, [`${head} ${them} tried again next time. ${lastWhy}`.trim(), ...new Set(notes), offered].filter(Boolean).join(" "));
   }
   await closeOurs();
   // Looked, and all there was is saved: the popup waits a few days before
   // asking for this site again, even if a new one is due by its schedule.
   await chrome.storage.local.set({ [`checked:${provider.id}`]: localIso() });
   // A note is something worth knowing about a sweep that did all it could.
-  return say(provider.id, "ok", [count ? `${count} new.` : "Nothing new.", ...new Set(notes)].join(" "));
+  return say(provider.id, "ok", [count ? `${count} new.` : "Nothing new.", ...new Set(notes), offered].filter(Boolean).join(" "));
 }
 
 // Chrome stops an idle background worker after about 30 seconds, and waiting

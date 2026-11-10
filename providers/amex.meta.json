@@ -9,5 +9,8 @@
   "pageFile": "providers/amex.page.js",
   "fileName": "{date} American Express {title}.pdf",
   "family": "click",
+  "offers": {
+    "file": "providers/amex.offers.js"
+  },
   "downloadWaitSeconds": 90
 }

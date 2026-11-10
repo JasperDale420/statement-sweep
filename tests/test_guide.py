@@ -220,7 +220,7 @@ LOGS = """async () => {
     if (h.kind === 'directory') await walk(h, p + n + '/');
     // A log being written again can be gone between listing and reading; the
     // next poll reads it.
-    else { try { out[p + n] = await (await h.getFile()).text(); } catch (e) { if (e.name !== 'NotFoundError') throw e; } } } }
+    else { try { out[p + n] = await (await h.getFile()).text(); } catch (e) { if (!['NotFoundError', 'NotReadableError'].includes(e.name)) throw e; } } } }
   await walk(await navigator.storage.getDirectory(), '');
   return Object.entries(out).filter(([k]) => /Fake Bank\\/Logs\\/run-/.test(k)).map(([, v]) => v).join('');
 }"""
