@@ -60,7 +60,14 @@ def headings(tab):
 
 
 def names_under(tab, state):
-    return tab.locator(f"section[data-state='{state}'] .name").all_inner_texts()
+    # textContent, so a folded row is named too.
+    return tab.locator(f"section[data-state='{state}'] .name").evaluate_all("ns => ns.map((n) => n.textContent)")
+
+
+def unfold(tab):
+    """Opens the row of sites up to date, if it is folded."""
+    if not tab.evaluate("document.querySelector('details.fold').open"):
+        tab.click("details.fold > summary")
 
 
 def names_in_site_order(tab):
@@ -74,7 +81,11 @@ def test_before_any_run_it_says_how_many_sites_need_updating(tab):
     for name in ("American Express", "Chase"):
         box = tab.locator(f"li:has(button[aria-label='Run {name}']) input[type=checkbox]")
         assert box.is_disabled() and not box.is_checked()
-    assert headings(tab) == ["Sites"] and tab.inner_text("#go") == "Get New Documents" and not tab.is_disabled("#go")
+    # Every site that will run needs a look, and the button says how many it runs.
+    # The two switched off fold away; they never run.
+    assert headings(tab) == ["Needs a Look"] and names_under(tab, "rest") == ["American Express", "Chase"]
+    assert tab.inner_text("details.fold > summary") == "2 sites switched off"
+    assert tab.inner_text("#go") == f"Get New Documents · {len(SITES) - 2} sites" and not tab.is_disabled("#go")
 
 
 def test_what_needs_you_comes_first_and_is_named_at_the_top(tab):
@@ -85,9 +96,11 @@ def test_what_needs_you_comes_first_and_is_named_at_the_top(tab):
     assert sorted(names_under(tab, "run")) == ["Alpaca", "Coinbase", "IRS"]
     assert tab.inner_text("#summary") == "Chase needs you"
     assert tab.get_attribute("#summary", "data-kind") == "attention"
-    # Once it ends, the sites group by how they ended.
+    # Once it ends, a site that stopped needs a look, and says why.
     show(tab, {"alpaca": st("ok", "Nothing new."), "chase": st("needs_you", "Sign in to Chase in its tab. This goes on by itself.") | {"state": "bad"}, "irs": st("bad", "Stopped waiting for you to sign in.")})
-    assert headings(tab) == ["Stopped", "Done", "Not Run Yet"]
+    assert headings(tab) == ["Needs a Look"]
+    assert {"Chase", "IRS"} <= set(names_under(tab, "look"))
+    assert tab.inner_text("li:has(button[aria-label='Run IRS']) .say") == "Stopped waiting for you to sign in."
 
 
 def test_several_sites_needing_you_are_counted(tab):
@@ -146,7 +159,7 @@ def test_a_site_waiting_for_you_has_an_orange_bar_and_a_stopped_one_keeps_where_
 def test_with_nothing_going_there_is_no_sync_bar(tab):
     show(tab, {"amex": st("ok", "2 new.") | prog(2, 2, True)})
     assert not tab.is_visible("#allbar")
-    assert tab.inner_text("#go") == "Get New Documents" and tab.get_attribute("#go", "class") == "primary"
+    assert tab.inner_text("#go") == f"Get New Documents · {len(SITES)} sites" and tab.get_attribute("#go", "class") == "primary"
 
 
 def test_finished_results_are_added_up(tab):
@@ -171,15 +184,17 @@ def test_offers_added_are_said_on_the_sites_line_and_never_stop_it(tab):
                "chase": st("ok", "Nothing new. Offers stopped: Chase signed you out.")})
     assert tab.inner_text("#summary") == "2 new documents"
     assert tab.get_attribute("#summary", "data-kind") == ""
-    lines = tab.locator("section[data-state=ok] .say").all_inner_texts()
-    assert "2 new. Added 3 offers · 4 already on your cards." in [l.strip() for l in lines]
-    assert tab.locator("section[data-state=bad]").count() == 0
+    # A site that is done says what it saved and where it now stands, on one line.
+    line = tab.inner_text("li:has(button[aria-label='Run American Express']) .when")
+    assert line == "2 new. Added 3 offers · 4 already on your cards · Nothing saved yet"
+    assert tab.locator("li:has(button[aria-label='Run American Express']) .say").count() == 0
+    assert tab.locator("li .state[data-state=bad]").count() == 0
 
 
 def test_every_message_is_shown_whole(tab):
     long = "0 saved. The page was not what this expected. " * 4
     show(tab, {"amex": st("bad", long)})
-    assert tab.inner_text("section[data-state=bad] .say").strip() == long.strip()
+    assert tab.inner_text("section[data-state=look] .say").strip() == long.strip()
 
 
 def test_unticking_every_site_leaves_nothing_to_start(tab):
@@ -213,7 +228,7 @@ def test_a_redraw_keeps_the_keyboards_place(tab):
     show(tab, {"amex": st("ok", "1 new.")})
     tab.focus("button[aria-label='Run Chase']")
     tab.evaluate("__session.board.alpaca = {state: 'ok', text: '2 new.', at: 1}; __listeners.forEach(f => f({type: 'board'}))")
-    tab.wait_for_function("document.querySelector('section[data-state=ok] li .name').textContent === 'Alpaca'")
+    tab.wait_for_function("document.querySelector(\"li:has(button[aria-label='Run Alpaca']) .when\").textContent.startsWith('2 new')")
     assert tab.evaluate("document.activeElement.getAttribute('aria-label')") == "Run Chase"
 
 
@@ -291,8 +306,8 @@ LATE = history(
 )
 
 
-def whens(tab, state=""):
-    return tab.locator(f"section[data-state='{state}'] li").evaluate_all(
+def whens(tab):
+    return tab.locator("#scroll li").evaluate_all(
         "ls => ls.map(l => [l.querySelector('.name').textContent, (l.querySelector('.when') || {}).textContent || '', (l.querySelector('.when') || {dataset: {}}).dataset.need || ''])")
 
 
@@ -305,8 +320,8 @@ def test_each_site_says_where_it_stands_under_its_name(tab):
     assert got["SDG&E"] == ("Up to date · next around Nov 28 · Possible gap: Mar 2026 Dismiss", "gap")
     assert got["IRS"] == ("No schedule yet · 1 saved", "unknown")
     assert got["Alpaca"] == ("Nothing saved yet", "never")
-    # Under the name, above anything a run said, inside the row.
-    name, when = (tab.locator(f"li:has(button[aria-label='Run Chase']) {s}").bounding_box() for s in (".name", ".when"))
+    # Under the name, inside the row.
+    name, when = (tab.locator(f"li:has(button[aria-label='Run PayPal']) {s}").bounding_box() for s in (".name", ".when"))
     assert when["y"] >= name["y"] + name["height"] - 1 and abs(when["x"] - (name["x"] + 23)) < 2
 
 
@@ -315,14 +330,21 @@ def test_rows_are_ordered_by_what_needs_you(tab):
     names = [n for n, _, _ in whens(tab)]
     assert names[:3] == ["American Express", "PayPal", "SDG&E"]
     assert names[-1] == "Chase" and names.index("Alpaca") < names.index("IRS") < names.index("Chase")
-    assert headings(tab) == ["Sites"]
+    # The one site up to date is folded away, and the fold says when it is next due.
+    assert headings(tab) == ["Needs a Look"] and names_under(tab, "rest") == ["Chase"]
+    assert not tab.evaluate("document.querySelector('details.fold').open")
+    assert tab.inner_text("details.fold > summary") == "1 site up to date\nNext due Dec 1"
+    unfold(tab)
+    assert tab.is_visible("li:has(button[aria-label='Run Chase'])")
 
 
-def test_ordering_by_need_keeps_the_grouping_by_run_state(tab):
+def test_after_a_run_what_stopped_needs_a_look_and_what_is_done_folds_away(tab):
     show(tab, {"chase": st("ok", "1 new."), "irs": st("bad", "Skipped.")}, local=LATE)
-    assert headings(tab) == ["Stopped", "Done", "Not Run Yet"]
-    assert names_under(tab, "ok") == ["Chase"] and names_under(tab, "bad") == ["IRS"]
-    assert names_under(tab, "")[:3] == ["American Express", "PayPal", "SDG&E"]
+    assert headings(tab) == ["Needs a Look"]
+    look = names_under(tab, "look")
+    assert look[:3] == ["American Express", "PayPal", "SDG&E"] and "IRS" in look
+    assert names_under(tab, "rest") == ["Chase"]
+    assert tab.text_content("li:has(button[aria-label='Run Chase']) .when") == "1 new · Up to date · next around Dec 1"
 
 
 def test_while_a_sync_goes_its_sites_keep_one_order(tab):
@@ -391,6 +413,7 @@ def test_only_the_sites_that_need_updating_start_ticked(tab):
 
 def test_ticking_an_up_to_date_site_adds_it_to_this_run(tab):
     show(tab, local=LATE)
+    unfold(tab)
     tab.locator("li:has(button[aria-label='Run Chase']) input[type=checkbox]").check()
     tab.locator("li:has(button[aria-label='Run American Express']) input[type=checkbox]").uncheck()
     assert tab.inner_text("#summary") == f"{len(SITES) - 1} sites ticked, {len(SITES) - 1} sites need updating"
@@ -414,7 +437,9 @@ def test_dismissing_a_possible_gap_stops_flagging_it(tab):
     assert tab.locator(f"{row} input[type=checkbox]").is_checked()
     tab.click(f"{row} button.dismiss")
     tab.wait_for_function("!document.querySelector(\"li:has(button[aria-label='Run SDG&E']) .when\").textContent.includes('gap')")
-    assert tab.inner_text(f"{row} .when") == "Up to date · next around Nov 28"
+    # Up to date now, it folds away with the others.
+    assert tab.text_content(f"{row} .when") == "Up to date · next around Nov 28"
+    assert "SDG&E" in names_under(tab, "rest")
     # It was ticked only for the gap, so it is unticked, and stays so next time.
     assert not tab.locator(f"{row} input[type=checkbox]").is_checked()
     assert tab.evaluate("window.__local['gapsOk:sdge']") == ["2026-02-28|2026-04-28"]

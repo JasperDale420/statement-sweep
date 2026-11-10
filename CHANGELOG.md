@@ -5,6 +5,10 @@ What changed for people using Statement Sweep, newest first. The version is
 
 ## Unreleased
 
+- The popup at rest lists only what needs a look: sites that may have
+  something new, that stopped, or whose card offers need you. The rest fold
+  into one row that says when the next is due. Each site has one line, and
+  the button says how many sites it will run.
 - While syncing, each site has a progress bar and the whole sync has one,
   with "about" totals from past syncs until a site's list is read. Stop
   ends the sync and keeps what was saved, and sites keep one order while
