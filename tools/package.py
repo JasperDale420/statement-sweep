@@ -6,7 +6,9 @@ import json, pathlib, zipfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FILES = ["manifest.json", "background.js", "capture.js", "naming.js", "cadence.js", "folders.js", "log.js", "guide.js", "options.html", "options.js", "sites-settings.js", "history.js", "popup.html", "popup.js", "ui.css",
          "LICENSE", "NOTICE.md", "PRIVACY.md", "providers/index.js", "providers/shared.js",
-         "offers.js", "offers-settings.js", "offers.html", "offers-page.js", "providers/offers-kit.js", "progress.js"]
+         "offers.js", "offers-settings.js", "offers.html", "offers-page.js", "providers/offers-kit.js", "progress.js",
+         # Add This Site: the site list, the popup's link, the picker, Settings' part and the one recipe for added sites.
+         "sites.js", "add-site.js", "picker.js", "added-settings.js", "providers/added.page.js"]
 
 manifest = json.loads((ROOT / "manifest.json").read_text())
 assert not any("127.0.0.1" in h or h.startswith("http://") for h in manifest["host_permissions"]), "a test build's site list"

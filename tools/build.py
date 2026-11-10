@@ -55,6 +55,9 @@ for file, ms in shared.items():
     "export const PROVIDERS = " + json.dumps(metas, indent=2) + ";\n")
 manifest = json.loads((ROOT / "manifest.json").read_text())
 manifest["host_permissions"] = sorted(hosts)
+# Add This Site asks for one more https site at a time, only when you add it
+# (sites.js). Kept here so a rebuilt manifest never loses it.
+manifest["optional_host_permissions"] = ["https://*/*"]
 if len(sys.argv) > 1 and sys.argv[1] == "--test":
     manifest["host_permissions"].append("http://127.0.0.1/*")
 (ROOT / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
