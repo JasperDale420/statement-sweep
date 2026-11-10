@@ -15,7 +15,7 @@ PAGE = "/ui-hr-portal-money/"
 WHO = "/api-trinet-auth/services/v1.0/authentication/user/token-details"
 MONEY = "/api-bs-hr-portal-money/v1/payroll"
 
-COMPANY, EMPLOYEE = "11XX", "00000000001"
+COMPANY, EMPLOYEE = "11XX", "EMP1"
 WHO_ANSWER = {"uid": "x", "companyid": [COMPANY], "emplid": [EMPLOYEE], "personid": EMPLOYEE}
 
 
@@ -101,10 +101,10 @@ def test_the_same_paycheck_twice_is_one_doc(tab):
 
 
 def test_each_company_in_the_sign_in_is_read_and_its_place_kept(tab):
-    who = {**WHO_ANSWER, "companyid": [COMPANY, "22YY"], "emplid": [EMPLOYEE, "00000000002"]}
+    who = {**WHO_ANSWER, "companyid": [COMPANY, "22YY"], "emplid": [EMPLOYEE, "EMP2"]}
     load(tab, who=who, lists={
         f"{COMPANY}/{EMPLOYEE}": {"data": {"checkSummaries": [check(1, "2031-01-31")]}},
-        "22YY/00000000002": {"data": {"checkSummaries": [check(9, "2029-06-30")]}},
+        "22YY/EMP2": {"data": {"checkSummaries": [check(9, "2029-06-30")]}},
     })
     assert read(tab)["docs"] == [doc(1, "2031-01-31", "Paycheck"), doc(9, "2029-06-30", "Paycheck", at=1)]
 
@@ -194,10 +194,10 @@ def test_an_official_pdf_comes_back_whole_from_its_one_address(tab):
 
 
 def test_a_second_company_s_paycheck_is_asked_of_that_company(tab):
-    who = {**WHO_ANSWER, "companyid": [COMPANY, "22YY"], "emplid": [EMPLOYEE, "00000000002"]}
+    who = {**WHO_ANSWER, "companyid": [COMPANY, "22YY"], "emplid": [EMPLOYEE, "EMP2"]}
     asked = load(tab, who=who, pdf=PDF)
     assert tab.evaluate(f"__sweep.fetchPdf({json.dumps(doc(9, '2029-06-30', 'Paycheck', at=1))})")["ok"]
-    assert asked == [f"{MONEY}/22YY/00000000002/paycheck-details-pdf/{key(9)}"]
+    assert asked == [f"{MONEY}/22YY/EMP2/paycheck-details-pdf/{key(9)}"]
 
 
 def test_a_company_no_longer_in_the_sign_in_asks_for_nothing(tab):
