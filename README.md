@@ -51,7 +51,32 @@ Chromium against stand-in pages.
 
 Sites change their pages without notice, so a recipe can break. If one
 does, [open an issue](https://github.com/JasperDale420/statement-sweep/issues/new/choose).
-To add a site, see [providers/README.md](providers/README.md).
+To add a site for yourself, see [Adding a site](#adding-a-site). To add a
+built-in recipe for everyone, see [providers/README.md](providers/README.md).
+
+## Adding a site
+
+A site that is not built in can be added from its own statements page.
+
+1. Sign in and open the page that lists your statements.
+2. Press the extension's icon, then **Add This Site…** at the bottom.
+   Chrome asks to let Statement Sweep read that one site.
+3. Click the link you would press to open one statement. Nothing opens:
+   Statement Sweep finds the other links like it and outlines them in green,
+   with the dates it read for them.
+4. Check the name, choose whether the first sync saves every statement
+   there or only new ones from now on, and press **Add Site**.
+
+The site then syncs with the others, with its own progress bar, schedule and
+log. What is kept for it is the pattern of the link you picked, its row and
+where its date is, never the page's text, an account number or a full
+address. **Settings → Sites You Added** shows how its last sync went, picks
+a link again if the site changes its page, or removes it and gives back its
+access. Statements already saved stay saved.
+
+Add This Site works only where each statement is a link you can click. Sites
+that show statements in a viewer, behind a form or a date picker, need a
+built-in recipe instead.
 
 ## Install
 

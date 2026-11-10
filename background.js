@@ -1,7 +1,10 @@
 // Runs a sweep: for each provider, find or open its tab, wait for you if you
 // are not signed in, read its list, and save what is new. Nothing leaves the
 // browser except the requests the provider's own page would make.
-import { PROVIDERS } from "./providers/index.js";
+// Every site, built in or added with Add This Site (sites.js). A live list:
+// loadSites() is called at the start of each piece of work to bring in the
+// sites added since.
+import { SITES as PROVIDERS, ADDED, cleanConfig, lastKey, loadSites, primedKey, withSite } from "./sites.js";
 import { pathFor } from "./naming.js";
 import { makeCapture } from "./capture.js";
 import { INBOX, getFolder, isGranted, moveFromInbox, withinChosen, writeFile } from "./folders.js";
@@ -66,6 +69,7 @@ const clearBadge = () => chrome.action.setBadgeText({ text: "" }).catch(() => {}
 const DUE_CHECK = "due-check";
 async function dueBadge() {
   if (running) return;
+  await loadSites();
   const stored = await chrome.storage.local.get(["off", ...PROVIDERS.flatMap((p) => keysFor(p.id))]);
   const off = stored.off || [];
   // What the record's ids say about their dates is kept, once.
@@ -152,6 +156,8 @@ async function inPage(tabId, provider, func, args = []) {
   let result;
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: ["providers/shared.js", provider.pageFile] });
+    // An added site's recipe reads its saved pattern from here (added.page.js).
+    if (provider.added) await chrome.scripting.executeScript({ target: { tabId }, func: (config) => { globalThis.__sweepAddedConfig = config; }, args: [provider.added] });
     [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
   } catch (e) {
     logs.error(provider, `inPage ${func.name || "script"} in tab ${tabId}`, e);
@@ -196,7 +202,7 @@ function onHost(url, provider) {
   let host;
   try { host = new URL(url).hostname; } catch (e) { return false; }
   return provider.match.some((m) => {
-    const wanted = new URL(m.replace("*.", "x.").replace(/\*$/, "")).hostname.replace(/^x\./, "");
+    const wanted = new URL(m.replace("*.", "").replace(/\*$/, "")).hostname;
     return m.includes("*.") ? host === wanted || host.endsWith("." + wanted) : host === wanted;
   });
 }
@@ -787,10 +793,32 @@ async function folderProblem(docs) {
   return "";
 }
 
+// Whether Chrome still lets the extension read an added site.
+const allowed = (provider) => (chrome.permissions ? chrome.permissions.contains({ origins: provider.match }).catch(() => false) : Promise.resolve(true));
+
+// How an added site's last sync went, for Settings: whether links like the
+// one you picked were found, how many, and the recipe's own reason if not.
+async function lastSync(provider, list) {
+  if (list.state !== "ok" && list.state !== "stopped") return;
+  await chrome.storage.local.set({ [lastKey(provider.id)]: {
+    at: localIso(), ok: list.state === "ok", noMatch: Boolean(list.noMatch), found: (list.docs || []).length,
+    ...(list.state === "stopped" ? { why: String(list.why || "").slice(0, 200) } : {}),
+  } });
+}
+
 // `together` is true when every site runs at once (see listOnceSignedIn).
 async function sweep(provider, together = false) {
   const key = `seen:${provider.id}`;
-  const seen = new Set((await chrome.storage.local.get(key))[key] || []);
+  const record = (await chrome.storage.local.get(key))[key];
+  const seen = new Set(record || []);
+  // An added site is read with the access you gave it when you added it.
+  // Taken back in Chrome's own settings, it is not asked for here.
+  if (provider.added && !(await allowed(provider))) {
+    return say(provider.id, "bad", `Statement Sweep can no longer read ${new URL(provider.added.origin).host}. Press Pick Again in Settings to allow it again.`);
+  }
+  // "Only new ones from now on": an added site's first sync saves nothing,
+  // and marks what it lists as seen.
+  let priming = Boolean(provider.added && provider.added.firstSync === "new" && !record);
   // A record from before dates were kept gets the dates its ids hold.
   const backfill = backfillFor(await chrome.storage.local.get(keysFor(provider.id)), provider.id);
   if (Object.keys(backfill).length) await chrome.storage.local.set(backfill);
@@ -872,6 +900,17 @@ async function sweep(provider, together = false) {
     if (list.state === "skipped") {
       if (!ours) tabFor.delete(provider.id);
       return say(provider.id, "bad", `${count ? `${count} saved. ` : ""}Skipped.`);
+    }
+    if (provider.added) await lastSync(provider, list);
+    if (priming && list.state === "ok") {
+      priming = false;
+      const ids = (list.docs || []).map((d) => d.id);
+      await chrome.storage.local.set({ [key]: ids, [primedKey(provider.id)]: ids });
+      await remember(provider, list.docs || []);
+      note(provider, `First sync, only new ones from now on: ${ids.length} listed and marked as seen, none saved.`);
+      await closeOurs();
+      await chrome.storage.local.set({ [`checked:${provider.id}`]: localIso() });
+      return say(provider.id, "ok", `Nothing new. ${ids.length} already there ${ids.length === 1 ? "is" : "are"} left as they are; new ones are saved from now on.`);
     }
 
     const fresh = (list.docs || []).filter((d) => !seen.has(d.id));
@@ -1084,7 +1123,7 @@ serially(async () => {
 // a group run one after another, in the list's order.
 function hostsOf(provider) {
   return provider.match.map((m) => ({
-    host: new URL(m.replace("*.", "x.").replace(/\*$/, "")).hostname.replace(/^x\./, ""),
+    host: new URL(m.replace("*.", "").replace(/\*$/, "")).hostname,
     wild: m.includes("*."),
   }));
 }
@@ -1200,6 +1239,7 @@ chrome.runtime.onMessage.addListener((message) => {
   (async () => {
     const keepAlive = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
     try {
+      await loadSites();
       const { off = [] } = await chrome.storage.local.get("off");
       await whyChosen(message, off).catch((e) => logs.runLine(`Could not say why each site was chosen: ${errorText(e)}`, "WARN"));
       // Get New Documents names the sites that need running (popup.js,
@@ -1248,3 +1288,47 @@ chrome.runtime.onMessage.addListener((message) => {
     }
   })();
 });
+
+// Add This Site: the picker (picker.js) sends the pattern it learned from the
+// link you picked. Heard only from the extension's own picker, in the top
+// frame of a tab on that pattern's own https origin, which you allowed it to
+// read. The pattern is checked and cut to its known fields (sites.js), then
+// kept; a site already added for that origin is replaced, keeping its id and
+// so its record of what was saved.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || message.type !== "addSite") return;
+  const answer = (o) => { try { sendResponse(o); } catch (e) { /* the tab closed */ } };
+  (async () => {
+    let origin = "";
+    try { origin = new URL(sender && sender.tab ? sender.tab.url : "").origin; } catch (e) { /* no tab, no origin */ }
+    const config = cleanConfig(message.config, origin, localIso());
+    if (!sender || sender.id !== chrome.runtime.id || sender.frameId !== 0 || !config || config.origin !== origin) {
+      answer({ ok: false, why: "That can only be added from Statement Sweep's own card, on the site itself." });
+      return;
+    }
+    if (!(await allowed({ match: config.match }))) {
+      answer({ ok: false, why: `Statement Sweep isn't allowed to read ${new URL(origin).host}. Press Add This Site again and allow it.` });
+      return;
+    }
+    const site = await serially(async () => {
+      const { [ADDED]: stored } = await chrome.storage.local.get(ADDED);
+      const { list, site: kept } = withSite(stored, config);
+      // A pattern picked again starts its record of how the last sync went afresh.
+      await chrome.storage.local.set({ [ADDED]: list });
+      await chrome.storage.local.remove(lastKey(kept.id)).catch(() => {});
+      return kept;
+    });
+    await loadSites();
+    answer({ ok: true, id: site.id, name: site.name });
+    chrome.runtime.sendMessage({ type: "board" }).catch(() => {});
+    checkDue();
+  })().catch(() => answer({ ok: false, why: "Statement Sweep couldn't add it. Please try again." }));
+  return true;
+});
+
+// Sites added or removed elsewhere (Settings' Remove) are taken in at once.
+if (chrome.storage.onChanged) {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && ADDED in changes) loadSites().then(checkDue).catch(() => {});
+  });
+}

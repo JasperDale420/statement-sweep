@@ -24,6 +24,7 @@ Press one button. It goes through each site you choose, in your own browser, and
 - Choose your own folders and file names
 - Shows what needs you first
 - If you turn it on, adds the card offers American Express and Chase show you to your own card as it syncs
+- Add a site that is not built in, by clicking one of its statement links
 - Light and dark mode
 
 Your data stays with you. There is no server, no account and no tracking. It never sees your passwords, and it sends nothing to its developer or anyone else.
@@ -40,6 +41,8 @@ Save the user's own statements and account documents, from sites the user signs 
 - `storage`: Remembers which documents were already saved, which sites are selected, and the user's naming settings, on the user's computer. When the user has not chosen a folder, it also keeps the latest lines of the sweep's own run log there (no page text, long numbers cut to their last 4 digits), which the user can export from Settings.
 - `debugger`: Some sites show a document only as a web page, with no PDF (a Venmo monthly statement, an Apple Store invoice, a TreasuryDirect holdings page). The extension attaches Chrome's debugger to the one tab the sweep itself opened, only while it runs Page.printToPDF on that page, and detaches straight after. It is never attached to a tab the user opened, never used to read or change a page, and the user can stop it at any time with Cancel on Chrome's debugging bar, which stops that site.
 - `webNavigation`: Some sites open a statement in a new tab instead of downloading it. While the extension waits on one such press, it listens for which tab opened a new tab, so that it takes and closes only the tab opened by the sweep's own tab, never one the user opened. Nothing is recorded.
+- `activeTab`: When the user presses Add This Site in the popup, tells the extension which site the current tab is on, and lets it draw the link picker in that tab.
+- Optional host permission (`https://*/*`): Never granted at install. When the user presses Add This Site on a site that is not built in, the extension asks Chrome for access to that one site, and Chrome asks the user. It is then used only to read that site's statement links like the one the user picked, and save those statements, and it is given back when the user removes the site in Settings.
 - `contentSettings`: Chrome holds a page's second automatic download for a prompt, and blocks a document a site opens in a new window when no person pressed. This allows automatic downloads and that window for the one site being swept, and both are removed when the sweep ends.
 - Host permissions: A few listed hosts are a site's own file store (mountain-storage.s3.amazonaws.com for Robinhood, statements.cardless.com for Bilt and the Coinbase One Card). The site opens a statement there in a new tab, and the extension fetches that one address and closes the tab. Each other listed host is a site where the extension reads the user's own document list and saves documents from the user's signed-in session. No host is contacted unless the user starts a sweep that includes it.
 

@@ -16,6 +16,15 @@ when you start a sweep.
 It never reads, stores or fills in your passwords. You sign in yourself, or
 your password manager does.
 
+**Sites you add, only when you add them.** On a site that is not built in,
+Add This Site asks Chrome to let Statement Sweep read that one site, and
+Chrome asks you first. Then, on that page, you click one statement link, and
+Statement Sweep reads the page to find the other links like it and their
+dates. From then on it reads that site as it reads a built-in one: only its
+links like the one you picked, on that site only, and it never presses a
+button or sends a form there. Removing the site in Settings gives the access
+back.
+
 While a site waits for you to sign in or finish a step, a small Statement Sweep
 card is drawn in that site's tab saying what to do; it reads nothing from the
 page and fills nothing in.
@@ -47,6 +56,11 @@ Chase business cards are kept apart: each is added to only by its own site.
   identifier made from the card's last 4 digits and the offer's words, so it
   does not press them again. The offers' names are read in the page and not
   kept.
+- For each site you added: its name, its address with no account details,
+  the shape of the statement link you picked (its place in its row, its
+  address with every number and id taken out, and its words only if they hold
+  no digits), where its dates are, what to do on its first sync, and how its
+  last sync went. Never the page's text, an account number or a full address.
 - Your choices: which sites are ticked, which sites have card offers turned
   on, and your folder and file name patterns.
 - The latest status of each site, and how long each step took, until you close
@@ -67,6 +81,12 @@ the extension deletes everything except the documents you saved.
 
 - **Access to the listed sites:** to read your document list and save documents
   from your own signed-in session on those sites.
+- **Access to a site you add (optional):** asked for one site at a time, only
+  when you press Add This Site on it, and Chrome asks you first. It is used
+  as for a listed site, and given back when you remove the site in Settings.
+  Statement Sweep has no access to any other site.
+- **Active tab:** to see which site you are on when you press Add This Site,
+  and draw the picker there. Only when you open the extension on that tab.
 - **Scripting:** to run that site's reading steps inside its page.
 - **Downloads:** to save documents and give them the names you chose.
 - **Storage:** to remember the items listed above.

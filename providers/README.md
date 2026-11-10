@@ -39,6 +39,17 @@ extension's isolated world, and sets `globalThis.__sweep`:
 A `click` doc may carry `nameMustMatch`, a regular expression the site's own file name must match.
 A provider that cannot save anything yet is kept with `"enabled": false`, and gets no access to its site.
 
+## Sites added with Add This Site
+
+`providers/added.page.js` is the one recipe for every site a person adds
+themselves. It has no meta: each added site is a saved pattern in
+`chrome.storage.local` (`addedSites`, checked by `cleanConfig` in `sites.js`),
+which the engine puts in `globalThis.__sweepAddedConfig` before each call. It
+answers like any recipe, presses or fetches only links matching that pattern
+on the site's own origin, and is run by `tests/test_guards.py` with patterns
+aimed at the dangerous controls. `picker.js` learns the pattern from one
+picked link with the same rules (`__sweepAdded.learn`).
+
 ## Card offers
 
 An offers file runs after the site's statements, in the same tab, and sets

@@ -89,6 +89,14 @@
   footer span { color: var(--secondary); }
   footer a { color: var(--accent-ink); font-weight: 500; text-decoration: none; border-radius: 4px; }
   footer a:hover { text-decoration: underline; }
+  /* Add This Site, and what it says when a page cannot be added. */
+  /* One footer with the card offers row above it, no rule between. */
+  #addFoot { flex-wrap: wrap; justify-content: flex-start; }
+  #offersFoot:not([hidden]) + #addFoot { border-top: 0; padding-top: 0; }
+  #addSite { display: inline-flex; align-items: center; gap: 5px; }
+  #addSite svg { width: 14px; height: 14px; }
+  #addSay { flex-basis: 100%; text-wrap: pretty; }
+  #addSay:empty { display: none; }
   [hidden] { display: none !important; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style></head>
@@ -107,5 +115,10 @@
     <span id="offersOnCount"></span>
     <a id="offersLink" href="offers.html" target="_blank">Card Offers</a>
   </footer>
+  <footer id="addFoot">
+    <a id="addSite" href="#" role="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.25v9.5M3.25 8h9.5"/></svg>Add This Site…</a>
+    <span id="addSay" role="status"></span>
+  </footer>
   <script src="popup.js" type="module"></script>
+  <script src="add-site.js" type="module"></script>
 </body></html>

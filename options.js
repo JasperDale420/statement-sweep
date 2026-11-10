@@ -1,8 +1,11 @@
-import { PROVIDERS } from "./providers/index.js";
+import { SITES as PROVIDERS, loadSites } from "./sites.js";
 import { DEFAULT_NAMING, checkPattern, normalise, pathFor } from "./naming.js";
 import { INBOX, forgetFolders, getFolder, setFolder, withinChosen } from "./folders.js";
 import { MAX_FILE_BYTES, exportHistory, fileNameFor, importHistory, planImport, readHistory, recordedCounts } from "./history.js";
 import { STORED_PREFIX, storedText } from "./log.js";
+
+// The sites you added have their own file name patterns too.
+await loadSites();
 
 const $ = (id) => document.getElementById(id);
 const SAMPLE = { id: "sample", date: "2026-10-28", title: "Monthly Statement" };

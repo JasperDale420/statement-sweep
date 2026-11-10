@@ -58,6 +58,22 @@
   #offersCap { width: fit-content; }
   a.secondary { display: inline-flex; align-items: center; color: var(--ink); text-decoration: none; }
   #offersSeen { font-weight: 400; }
+  /* Sites You Added: each row a site, its host under its name, and an
+     orange line when its last sync found nothing like the link picked. */
+  .added-site { align-items: start; }
+  .added-site .who { display: grid; min-width: 0; }
+  .site-name { font-weight: 500; overflow-wrap: anywhere; }
+  .site-host { color: var(--secondary); font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
+  .site-state { color: var(--secondary); font-weight: 400 !important; }
+  .site-state[data-kind=warn], .added-site .site-why { color: var(--orange); font-weight: 500; }
+  .added-site.warn { background: var(--orange-tint); }
+  .added-site.warn:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+  .added-site.warn:last-child { border-radius: 0 0 var(--radius) var(--radius); }
+  .added-site.warn:only-child { border-radius: var(--radius); }
+  .note { margin: 6px 14px 0; color: var(--secondary); font-size: 12px; line-height: 16px; text-wrap: pretty; }
+  #addedStatus { margin: 6px 14px 0; color: var(--green); font-size: 12px; line-height: 16px; font-weight: 500; text-wrap: pretty; }
+  #addedStatus:empty { display: none; }
+  #addedList .empty { grid-column: 1 / -1; }
   #sitesList { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 16px; }
   .choice > .pair { display: flex; flex-wrap: wrap; gap: 8px; margin-right: 0; }
   #importRow { align-items: start; }
@@ -177,6 +193,11 @@
   </div>
   <p id="sitesStatus" role="status"></p>
 
+  <h2 id="addedHead">Sites You Added</h2>
+  <div class="group" id="addedList"></div>
+  <p class="note" id="addedNote">Add This Site works only where each statement is a link you can click. Sites that show statements in a viewer, behind a form or a date picker, need a built-in recipe instead.</p>
+  <p id="addedStatus" role="status"></p>
+
   <h2 id="offersHead">Card Offers</h2>
   <div class="group" id="offersGroup">
     <div class="row">
@@ -248,5 +269,6 @@
 </main>
 <script src="options.js" type="module"></script>
 <script src="sites-settings.js" type="module"></script>
+<script src="added-settings.js" type="module"></script>
 <script src="offers-settings.js" type="module"></script>
 </body></html>

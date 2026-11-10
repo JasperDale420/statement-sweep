@@ -5,6 +5,11 @@ What changed for people using Statement Sweep, newest first. The version is
 
 ## Unreleased
 
+- Add This Site: teach Statement Sweep a site that is not built in, on its
+  own statements page, by clicking one statement link. It finds the others
+  like it, reads their dates, and the site then syncs with the rest. Chrome
+  asks for access to that one site when you add it. Settings lists the sites
+  you added, picks again, and removes them.
 - The popup at rest lists only what needs a look: sites that may have
   something new, that stopped, or whose card offers need you. The rest fold
   into one row that says when the next is due. Each site has one line, and

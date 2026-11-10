@@ -26,6 +26,7 @@
     "type": "module"
   },
   "permissions": [
+    "activeTab",
     "alarms",
     "contentSettings",
     "debugger",
@@ -72,5 +73,8 @@
     "https://www.spectrum.net/*",
     "https://www.treasurydirect.gov/*",
     "https://www.wealthfront.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
   ]
 }
