@@ -5,6 +5,9 @@ What changed for people using Statement Sweep, newest first. The version is
 
 ## Unreleased
 
+- TriNet: every paycheck stub, off-cycle ones too, from TriNet's HR
+  Platform, for each company that paid you through TriNet.
+
 ## 0.4.0 · 2026-11-10
 
 - Add This Site: teach Statement Sweep a site that is not built in, on its

@@ -64,6 +64,7 @@
     "https://statements.cardless.com/*",
     "https://tax-center-forms-production.s3.amazonaws.com/*",
     "https://treasurydirect.gov/*",
+    "https://trinet.hrpassport.com/*",
     "https://workplaceservices.fidelity.com/*",
     "https://www.americanexpress.com/*",
     "https://www.apple.com/*",

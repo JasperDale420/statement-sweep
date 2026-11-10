@@ -353,6 +353,23 @@ export const PROVIDERS = [
     }
   },
   {
+    "id": "trinet",
+    "name": "TriNet",
+    "match": [
+      "https://trinet.hrpassport.com/*"
+    ],
+    "listUrl": "https://trinet.hrpassport.com/ui-hr-portal-money/#/paychecks-and-statements",
+    "pageFile": "providers/trinet.page.js",
+    "fileName": "{date} TriNet {title}.pdf",
+    "family": "fetch",
+    "guide": {
+      "signIn": [
+        "Sign in to TriNet in this tab.",
+        "Statement Sweep carries on once you are in."
+      ]
+    }
+  },
+  {
     "id": "venmo",
     "name": "Venmo",
     "match": [
