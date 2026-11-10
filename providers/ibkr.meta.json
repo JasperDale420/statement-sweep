@@ -16,5 +16,6 @@
       "Sign in to Interactive Brokers here, with your usual second step.",
       "Statement Sweep goes on by itself once you're in."
     ]
-  }
+  },
+  "postsAfterDays": 3
 }

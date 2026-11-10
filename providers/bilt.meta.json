@@ -10,5 +10,6 @@
   "family": "click",
   "fileHosts": [
     "statements.cardless.com"
-  ]
+  ],
+  "postsAfterDays": 1
 }

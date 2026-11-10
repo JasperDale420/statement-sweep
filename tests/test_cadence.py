@@ -428,6 +428,37 @@ def test_one_arrival_teaches_nothing(tab):
     assert call(tab, "siteStatus", r, TODAY.isoformat())["lagDays"] == 0
 
 
+def test_until_it_has_learned_its_own_a_site_uses_its_usual_delay(tab):
+    # 41 days since a monthly statement's date: due by its date alone, but a
+    # site that posts 15 days late is not expected for a few days yet.
+    days = every(12, end=TODAY - timedelta(days=41))
+    plain = call(tab, "siteStatus", record({"s": days}), TODAY.isoformat())
+    assert plain["status"] == "due" and plain["lagDays"] == 0
+    late = call(tab, "siteStatus", record({"s": days}), TODAY.isoformat(), {"postsAfter": 15})
+    assert late["status"] == "current" and late["lagDays"] == 15
+    assert late["expected"] == (days[0] + timedelta(days=45)).isoformat()
+
+
+def test_a_learned_delay_wins_over_the_usual_one(tab):
+    days = every(12, end=TODAY - timedelta(days=41))
+    r = record({"s": days})
+    ids = sorted(r["ids"], key=lambda i: r["dates"][i])
+    r["arrived"] = {i: (date.fromisoformat(r["dates"][i]) + timedelta(days=3)).isoformat() for i in ids[-3:]}
+    assert call(tab, "siteStatus", r, TODAY.isoformat(), {"postsAfter": 15})["lagDays"] == 3
+
+
+def test_a_usual_delay_longer_than_the_cycle_is_ignored(tab):
+    assert call(tab, "postingLag", {}, {}, 30, [], 40) == 0
+    assert call(tab, "postingLag", {}, {}, 30, [], 15) == 15
+    assert call(tab, "postingLag", {}, {}, None, [], 15) == 0
+
+
+def test_standing_reads_the_sites_own_usual_delay(tab):
+    stored = {"seen:s": ["2026-09-30"], "dates:s": {"2026-09-30": "2026-09-30"}}
+    got = call(tab, "standingOf", stored, {"id": "s", "postsAfterDays": 15}, TODAY.isoformat())
+    assert got["documents"] == 1
+
+
 def test_the_record_reads_arrivals_and_checks(tab):
     stored = {"seen:s": ["a"], "dates:s": {"a": "2026-10-01"}, "arrived:s": {"a": "2026-10-09", "b": "nope"}, "checked:s": "2026-11-01"}
     got = call(tab, "recordOf", stored, "s")

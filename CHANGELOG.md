@@ -9,6 +9,11 @@ What changed for people using Statement Sweep, newest first. The version is
   with "about" totals from past syncs until a site's list is read. Stop
   ends the sync and keeps what was saved, and sites keep one order while
   it runs.
+- Card offers: a site's first sync adds every offer it has, and later
+  syncs add only new ones. Settings can still limit it to 10 or 25 a sync.
+- Sites that post statements days after their date (PayPal mid-month,
+  NetBenefits weeks after the quarter, Venmo, Robinhood and others) are no
+  longer flagged as due before their statement can be there.
 - Card offers for American Express, Chase and Chase Business, off until
   turned on per site in Settings.
 - New-tab and print-to-PDF saving, per-site run logs, and an on-screen guide

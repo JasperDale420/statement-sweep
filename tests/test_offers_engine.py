@@ -97,13 +97,18 @@ def adds_in(got):
     return [e[1] for e in got["log"] if e[0] == "add"]
 
 
+def today_in(tab):
+    return tab.evaluate("(async () => (await import('/cadence.js')).localIso())()")
+
+
 def test_offers_not_yet_added_are_added_and_kept(tab):
     got = run(tab, [ok(offer(1), offer(2), offer(3, added=True))])
     assert adds_in(got) == ["1111:o1", "1111:o2"]
     assert got["words"] == {"kind": "done", "text": "Added 2 offers · 1 already on your card.", "stopped": False}
-    # What the sweep added is kept apart from what the site already showed as added.
-    assert got["local"]["offers:site"] == {"added": ["1111:o1", "1111:o2"], "seen": ["1111:o3"], "left": []}
-    assert got["said"] == ["Adding offers · 1 of 2 on Card ·· 1111", "Adding offers · 2 of 2 on Card ·· 1111"]
+    # What the sweep added is kept apart from what the site already showed as
+    # added, with the day its first full sync finished.
+    assert got["local"]["offers:site"] == {"added": ["1111:o1", "1111:o2"], "seen": ["1111:o3"], "left": [], "full": today_in(tab)}
+    assert got["said"] == ["First sync · adding every offer · 1 of 2 on Card ·· 1111", "First sync · adding every offer · 2 of 2 on Card ·· 1111"]
 
 
 def test_the_recipe_files_are_loaded_after_the_shared_ones(tab):
@@ -141,20 +146,56 @@ def test_nothing_to_add_says_so(tab):
     assert run(tab, [ok()])["words"] == {"kind": "done", "text": "No new offers.", "stopped": False}
 
 
-def test_presses_stop_at_a_careful_cap_and_the_rest_wait(tab):
+def test_the_first_sync_adds_every_offer_and_later_ones_only_the_new(tab):
     got = run(tab, [ok(*[offer(i) for i in range(40)])])
-    assert len(adds_in(got)) == 25
-    assert got["words"] == {"kind": "capped", "text": "25 offers added · 15 wait for the next sync", "stopped": False}
-    # The next sync goes on with the rest, and with the cap again.
-    again = run(tab, [ok(*[offer(i) for i in range(40)])])
-    assert adds_in(again) == [f"1111:o{i}" for i in range(25, 40)]
+    assert len(adds_in(got)) == 40
+    assert got["words"] == {"kind": "done", "text": "Added 40 offers.", "stopped": False}
+    assert got["said"][0] == "First sync · adding every offer · 1 of 40 on Card ·· 1111"
+    assert got["sum"]["first"] and got["sum"]["full"]
+    assert got["local"]["offers:site"]["full"] == today_in(tab)
+    # The next sync presses only what is new, and says so.
+    again = run(tab, [ok(*[offer(i) for i in range(43)])])
+    assert adds_in(again) == ["1111:o40", "1111:o41", "1111:o42"]
+    assert again["words"]["text"] == "Added 3 new offers · 40 already on your cards."
+    assert again["said"][0] == "Adding new offers · 1 of 3 on Card ·· 1111"
+    assert not again["sum"]["first"]
+
+
+def test_a_first_sync_cut_short_is_still_the_first_next_time(tab):
+    # A sign-out part way: what was added is kept, and the next sync is still the full one.
+    got = run(tab, [ok(*[offer(i) for i in range(5)])], adds={"1111:o2": {"ok": False, "state": "signed_out"}})
+    assert adds_in(got) == ["1111:o0", "1111:o1", "1111:o2"]
+    assert "full" not in got["local"]["offers:site"]
+    again = run(tab, [ok(*[offer(i) for i in range(5)])])
+    assert adds_in(again) == ["1111:o2", "1111:o3", "1111:o4"]
+    assert again["said"][0].startswith("First sync · adding every offer")
+    assert again["local"]["offers:site"]["full"] == today_in(tab)
+
+
+def test_an_offer_that_did_not_add_keeps_the_first_sync_open(tab):
+    got = run(tab, [ok(offer(1), offer(2))], adds={"1111:o1": {"ok": False, "why": "The page did not answer."}})
+    assert "full" not in got["local"]["offers:site"]
+
+
+def test_no_sync_presses_more_than_500_on_a_site(tab):
+    got = run(tab, [ok(*[offer(i) for i in range(520)])])
+    assert len(adds_in(got)) == 500
+    assert got["words"] == {"kind": "capped", "text": "500 offers added · 20 wait for the next sync", "stopped": False}
+    assert "full" not in got["local"]["offers:site"]
 
 
 def test_the_cap_counts_every_card_of_a_sync(tab):
     reads = [ok(*[offer(i) for i in range(20)], more=True),
              {"state": "ok", "card": "2222", "offers": [offer(i, card="2222") for i in range(20)], "more": True}]
-    got = run(tab, reads, nexts=[{"moved": True}, {"moved": False}])
+    got = run(tab, reads, nexts=[{"moved": True}, {"moved": False}], local={"offersCap": 25})
     assert len(adds_in(got)) == 25 and adds_in(got)[-1] == "2222:o4"
+
+
+def test_every_card_is_gone_through_on_a_first_sync(tab):
+    reads = [ok(*[offer(i) for i in range(20)], more=True),
+             {"state": "ok", "card": "2222", "offers": [offer(i, card="2222") for i in range(20)]}]
+    got = run(tab, reads, nexts=[{"moved": True}])
+    assert len(adds_in(got)) == 40 and got["local"]["offers:site"]["full"] == today_in(tab)
 
 
 def test_a_pause_between_every_two_presses_and_none_before_the_first(tab):
@@ -167,7 +208,7 @@ def test_the_pause_is_a_few_seconds_and_never_the_same(tab):
     got = tab.evaluate("""async () => { const m = await import('/offers.js');
       const many = Array.from({length: 500}, () => m.paceMs());
       return { range: m.PACE_MS, low: m.paceMs(() => 0), high: m.paceMs(() => 0.999999), min: Math.min(...many), max: Math.max(...many), kinds: new Set(many).size, cap: m.MAX_PRESSES }; }""")
-    assert got["range"] == [1500, 4000] and got["cap"] == 25
+    assert got["range"] == [1500, 4000] and got["cap"] == 500
     assert got["low"] == 1500 and got["high"] == 4000
     assert 1500 <= got["min"] and got["max"] <= 4000 and got["kinds"] > 100
 
@@ -315,7 +356,7 @@ def test_what_each_card_showed_is_kept_with_its_words_and_status(tab):
         {"id": "1111:o3", "merchant": "Shop 3", "title": "Earn 3% back", "expires": None, "status": "on_card"},
     ]
     # The record of ids is kept as before, beside it.
-    assert got["local"]["offers:site"] == {"added": ["1111:o1"], "seen": ["1111:o3"], "left": ["1111:o2"]}
+    assert got["local"]["offers:site"] == {"added": ["1111:o1"], "seen": ["1111:o3"], "left": ["1111:o2"], "full": today}
 
 
 def test_a_card_label_never_holds_more_than_its_last_four_digits(tab):
@@ -380,14 +421,16 @@ def test_the_cap_is_the_one_chosen_in_settings(tab):
     got = run(tab, [ok(*[offer(i) for i in range(15)])], local={"offersCap": 10})
     assert len(adds_in(got)) == 10
     assert got["words"] == {"kind": "capped", "text": "10 offers added · 5 wait for the next sync", "stopped": False}
-    assert got["said"][0] == "Adding offers · 1 of 10 on Card ·· 1111"
+    assert got["said"][0] == "First sync · adding every offer · 1 of 10 on Card ·· 1111"
+    # A limited first sync is not a full one: the next is still the first.
+    assert "full" not in got["local"]["offers:site"]
 
 
-def test_a_cap_that_is_not_a_choice_is_never_more_than_25(tab):
+def test_a_cap_that_is_not_a_choice_is_read_as_every_new_offer(tab):
     got = run(tab, [ok(*[offer(i) for i in range(40)])], local={"offersCap": 400})
-    assert len(adds_in(got)) == 25
+    assert len(adds_in(got)) == 40
     choices = tab.evaluate("async () => { const m = await import('/offers.js'); return [m.CAP_CHOICES, m.MAX_PRESSES]; }")
-    assert choices == [[10, 25], 25]
+    assert choices == [[0, 10, 25], 500]
 
 
 def test_capped_with_another_card_to_come_says_there_may_be_more(tab):

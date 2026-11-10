@@ -283,9 +283,9 @@ def history(**sites):
 
 
 LATE = history(
-    chase=monthly("chase", date(2026, 10, 31)),                      # up to date, next around Nov 30
+    chase=monthly("chase", date(2026, 10, 31)),                      # up to date, next around Dec 1 (posts a day late)
     amex=monthly("amex", date(2026, 8, 31)),                         # overdue
-    paypal=monthly("paypal", date(2026, 9, 25)),                     # new one likely
+    paypal=monthly("paypal", date(2026, 9, 10)),                     # new one likely (posts 15 days late)
     sdge=monthly("sdge", date(2026, 10, 28), n=12) | {"seen:sdge": [f"card:2026-{m:02d}-28" for m in range(1, 11) if m != 3]},  # a gap
     irs={"seen:irs": ["only-one"]},                                  # too little history
 )
@@ -299,8 +299,8 @@ def whens(tab, state=""):
 def test_each_site_says_where_it_stands_under_its_name(tab):
     show(tab, local=LATE)
     got = {name: (text, need) for name, text, need in whens(tab)}
-    assert got["Chase"] == ("Up to date · next around Nov 30", "current")
-    assert got["American Express"] == ("Overdue by 40 days · newest Aug 31", "overdue")
+    assert got["Chase"] == ("Up to date · next around Dec 1", "current")
+    assert got["American Express"] == ("Overdue by 39 days · newest Aug 31", "overdue")
     assert got["PayPal"] == ("New one likely · expected around Oct 25", "due")
     assert got["SDG&E"] == ("Up to date · next around Nov 28 · Possible gap: Mar 2026 Dismiss", "gap")
     assert got["IRS"] == ("No schedule yet · 1 saved", "unknown")
@@ -367,7 +367,7 @@ def test_when_nothing_is_due_get_new_has_nothing_to_run_and_says_why(tab):
 def test_after_a_run_a_site_left_out_says_it_is_not_due(tab):
     show(tab, {"amex": st("ok", "1 new.")}, local=LATE)
     got = {name: text for name, text, _ in whens(tab)}
-    assert got["Chase"] == "Not due yet · next around Nov 30"
+    assert got["Chase"] == "Not due yet · next around Dec 1"
 
 
 def test_tax_forms_in_season_are_said_and_run(tab):
@@ -375,7 +375,7 @@ def test_tax_forms_in_season_are_said_and_run(tab):
              "dates:coinbase": {"tax-1099:2024": "2025-02-14"}, "tax:coinbase": ["tax-1099:2024"]}
     show(tab, local=forms, today="2027-01-20T12:00:00")
     got = {name: (text, need) for name, text, need in whens(tab)}
-    assert got["Coinbase"] == ("Up to date · next around Jan 31 · Tax forms expected now (2026)", "tax")
+    assert got["Coinbase"] == ("Up to date · next around Feb 1 · Tax forms expected now (2026)", "tax")
     tab.click("#go")
     tab.wait_for_function("__sent.length === 1")
     assert "coinbase" in tab.evaluate("__sent")[0]["sites"]

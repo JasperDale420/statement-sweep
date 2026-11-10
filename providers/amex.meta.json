@@ -12,5 +12,6 @@
   "offers": {
     "file": "providers/amex.offers.js"
   },
-  "downloadWaitSeconds": 90
+  "downloadWaitSeconds": 90,
+  "postsAfterDays": 1
 }

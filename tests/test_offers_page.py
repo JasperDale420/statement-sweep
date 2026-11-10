@@ -118,7 +118,7 @@ def test_the_three_groups_of_a_card(browser):
     assert texts(t, "#waiting .merchant") == ["Corner Market", "Northside Coffee", "Harbor Air"]
     assert texts(t, "#waiting .meta") == ["Ends Nov 14", "Ends Nov 30"]
     assert t.locator("#waiting .meta[data-soon]").all_inner_texts() == ["Ends Nov 14"]
-    assert t.inner_text("#waitingNote") == "Added on the next sync, up to 25 a site, a few seconds apart. Soonest to expire first."
+    assert t.inner_text("#waitingNote") == "Added on the next sync, every one, in this site's first full sync, a few seconds apart. Soonest to expire first."
     # Added: by Statement Sweep with its day, apart from what was on the card already.
     assert t.inner_text("#addedHead") == "ADDED · 3"
     assert texts(t, "#added .merchant") == ["Pine Street Books", "Bright Streaming", "Metro Fuel"]
@@ -225,6 +225,10 @@ def test_add_offers_now_refused_says_why(browser):
 def test_the_cap_chosen_is_the_one_said(browser):
     t = open_page(browser, {"offersOn": ["amex"], "offersCap": 10, "offerDetails:amex": AMEX})
     assert t.inner_text("#waitingNote") == "Added on the next sync, up to 10 a site, a few seconds apart. Soonest to expire first."
+    t.close()
+    # After a site's first full sync, every new one.
+    t = open_page(browser, {"offersOn": ["amex"], "offers:amex": {"added": [], "seen": [], "left": [], "full": "2026-11-01"}, "offerDetails:amex": AMEX})
+    assert t.inner_text("#waitingNote") == "Added on the next sync, every new one, a few seconds apart. Soonest to expire first."
     t.close()
 
 

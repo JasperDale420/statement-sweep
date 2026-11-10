@@ -26,6 +26,10 @@ for m in metas:
         assert o.get("cards", "") in ("", "personal", "business"), (m["id"], "offers cards", o.get("cards"))
         if "url" in o:
             assert any(o["url"].startswith(h[:-1]) for h in m["match"] if "*." not in h), (m["id"], o["url"])
+    # How many days after its own date a site usually posts a document
+    # (cadence.js postingLag), until the extension has learned its own.
+    if "postsAfterDays" in m:
+        assert isinstance(m["postsAfterDays"], int) and 0 <= m["postsAfterDays"] <= 45, (m["id"], "postsAfterDays")
     # A file the engine puts in the page's own world before a save (world MAIN).
     if "mainFile" in m:
         assert re.fullmatch(r"providers/[a-z0-9]+\.main\.js", m["mainFile"]) and (ROOT / m["mainFile"]).is_file(), (m["id"], m["mainFile"])

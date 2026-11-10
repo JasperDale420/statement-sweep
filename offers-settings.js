@@ -3,7 +3,7 @@
 // Saved as soon as it is changed, apart from the folder and name settings'
 // Save button, since it changes no file.
 import { PROVIDERS } from "./providers/index.js";
-import { CAP_CHOICES, OFFERS_CAP, OFFERS_ON, PACE_MS, addedSoFar, capOf, detailsKey, hasOffers, liveDetails, offerCounts, offersKey } from "./offers.js";
+import { ALL, CAP_CHOICES, MAX_PRESSES, OFFERS_CAP, OFFERS_ON, PACE_MS, addedSoFar, capChoice, detailsKey, fullOf, hasOffers, liveDetails, offerCounts, offersKey } from "./offers.js";
 
 const $ = (id) => document.getElementById(id);
 const sites = PROVIDERS.filter(hasOffers);
@@ -16,16 +16,17 @@ const KIND = { personal: "personal cards", business: "business cards" };
 
 // The pace, from the numbers the engine keeps to, so the two never differ.
 const pace = $("offersPace");
-if (pace) pace.textContent = `${seconds(PACE_MS[0])} to ${seconds(PACE_MS[1])} seconds apart, soonest to expire first. The rest wait for the next sync. It stops at once if a site signs you out, asks you to confirm something, or says to slow down.`;
+if (pace) pace.textContent = `A site's first sync adds every offer it has, which can be hundreds and take a while: about 15 minutes for 300. Later syncs add only new ones. ${seconds(PACE_MS[0])} to ${seconds(PACE_MS[1])} seconds apart, soonest to expire first, and never more than ${MAX_PRESSES} a sync. It stops at once if a site signs you out, asks you to confirm something, or says to slow down.`;
 
+const choiceWords = (n) => (n === ALL ? "Every new offer" : `Up to ${n} offers a site`);
 const cap = $("offersCap");
 if (cap) {
-  cap.replaceChildren(...CAP_CHOICES.map((n) => Object.assign(document.createElement("option"), { value: String(n), textContent: `Up to ${n} offers a site` })));
+  cap.replaceChildren(...CAP_CHOICES.map((n) => Object.assign(document.createElement("option"), { value: String(n), textContent: choiceWords(n) })));
   cap.addEventListener("change", async () => {
     const n = Number(cap.value);
     if (!CAP_CHOICES.includes(n)) return;
     await chrome.storage.local.set({ [OFFERS_CAP]: n });
-    status.textContent = `Up to ${n} offers a site each sync.`;
+    status.textContent = n === ALL ? "Every new offer is added each sync." : `Up to ${n} offers a site each sync.`;
   });
 }
 
@@ -38,7 +39,7 @@ async function draw() {
   }
   const stored = await chrome.storage.local.get(keys());
   const on = stored[OFFERS_ON] || [];
-  if (cap) cap.value = String(await capOf());
+  if (cap) cap.value = String(await capChoice());
   let added = 0, needs = 0;
   list.replaceChildren(...sites.map((provider) => {
     const row = document.createElement("div");
@@ -56,7 +57,10 @@ async function draw() {
     added += count;
     needs += offerCounts(liveDetails(stored[detailsKey(provider.id)])).needs;
     const said = document.createElement("span");
-    said.textContent = box.checked ? (count ? `${count} added so far` : "None added yet") : count ? `Off · ${count} added before` : "Off";
+    // On: how many so far, and whether its first, full sync is still to come.
+    const first = fullOf(stored[offersKey(provider.id)]) ? "" : " · first full sync next";
+    const words = () => (box.checked ? `${count ? `${count} added so far` : "None added yet"}${first}` : count ? `Off · ${count} added before` : "Off");
+    said.textContent = words();
     row.append(box, label, said);
     box.addEventListener("change", async () => {
       const { [OFFERS_ON]: now = [] } = await chrome.storage.local.get(OFFERS_ON);
@@ -65,7 +69,7 @@ async function draw() {
       status.textContent = box.checked
         ? `On for ${provider.name}. Its offers are added on the next sync.`
         : `Off for ${provider.name}.`;
-      said.textContent = box.checked ? (count ? `${count} added so far` : "None added yet") : count ? `Off · ${count} added before` : "Off";
+      said.textContent = words();
     });
     return row;
   }));

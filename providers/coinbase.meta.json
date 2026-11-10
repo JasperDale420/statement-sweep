@@ -13,5 +13,6 @@
   "pageFile": "providers/coinbase.page.js",
   "fileName": "{date} Coinbase {title}.pdf",
   "family": "click",
-  "downloadWaitSeconds": 90
+  "downloadWaitSeconds": 90,
+  "postsAfterDays": 1
 }

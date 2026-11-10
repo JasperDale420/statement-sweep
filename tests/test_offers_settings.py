@@ -91,6 +91,11 @@ def test_what_is_on_and_added_so_far_is_shown(browser):
     t.wait_for_selector("#offersSites input")
     assert t.is_checked("#offers-chase") and not t.is_checked("#offers-amex")
     # Only what Statement Sweep added counts, not what was on the card already.
+    assert t.locator("#offersSites .offer-site > span").all_inner_texts() == ["Off", "3 added so far · first full sync next", "Off"]
+    t.close()
+    # Once a site's first full sync is done, only the count is said.
+    t = open_settings(browser, local={"offersOn": ["chase"], "offers:chase": {"added": ["a", "b", "c"], "seen": [], "left": [], "full": "2026-11-10"}})
+    t.wait_for_selector("#offersSites input")
     assert t.locator("#offersSites .offer-site > span").all_inner_texts() == ["Off", "3 added so far", "Off"]
     t.close()
 
@@ -98,7 +103,7 @@ def test_what_is_on_and_added_so_far_is_shown(browser):
 def test_the_count_follows_a_sync_while_settings_is_open(browser):
     t = open_settings(browser, local={"offersOn": ["amex"]})
     t.wait_for_selector("#offersSites input")
-    assert t.locator("#offersSites .offer-site > span").first.inner_text() == "None added yet"
+    assert t.locator("#offersSites .offer-site > span").first.inner_text() == "None added yet · first full sync next"
     t.evaluate("chrome.storage.local.set({'offers:amex': {added: ['x'], seen: [], left: []}})")
     t.wait_for_function("document.getElementById('offersSites').innerText.includes('1 added so far')")
     assert t.is_checked("#offers-amex")
@@ -108,7 +113,9 @@ def test_the_count_follows_a_sync_while_settings_is_open(browser):
 def test_the_pace_and_cap_are_said_from_the_engines_own_numbers(browser):
     t = open_settings(browser)
     t.wait_for_function("document.getElementById('offersPace').textContent.length > 0")
-    assert t.inner_text("#offersPace").startswith("1.5 to 4 seconds apart, soonest to expire first. The rest wait for the next sync.")
+    pace = t.inner_text("#offersPace")
+    assert pace.startswith("A site's first sync adds every offer it has")
+    assert "Later syncs add only new ones. 1.5 to 4 seconds apart, soonest to expire first, and never more than 500 a sync." in pace
     assert "signs you out, asks you to confirm something, or says to slow down" in t.inner_text("#offersPace")
     t.close()
 
@@ -145,11 +152,11 @@ def details(*statuses):
         {"id": f"1111:o{i}", "merchant": f"Shop {i}", "title": "Earn 5% back", "expires": None, "status": st} for i, st in enumerate(statuses)]}}}
 
 
-def test_each_sync_chooses_10_or_25_and_25_is_the_default(browser):
+def test_each_sync_adds_every_new_offer_unless_limited_to_10_or_25(browser):
     t = open_settings(browser)
     t.wait_for_selector("#offersSites input")
-    assert t.locator("#offersCap option").all_inner_texts() == ["Up to 10 offers a site", "Up to 25 offers a site"]
-    assert t.input_value("#offersCap") == "25"
+    assert t.locator("#offersCap option").all_inner_texts() == ["Every new offer", "Up to 10 offers a site", "Up to 25 offers a site"]
+    assert t.input_value("#offersCap") == "0"
     assert t.evaluate("document.querySelector('label[for=offersCap]').textContent") == "Each Sync"
     t.select_option("#offersCap", "10")
     t.wait_for_function("window.__local.offersCap === 10")
@@ -157,13 +164,16 @@ def test_each_sync_chooses_10_or_25_and_25_is_the_default(browser):
     t.close()
     again = open_settings(browser, local={"offersCap": 10})
     again.wait_for_function("document.getElementById('offersCap').value === '10'")
+    again.select_option("#offersCap", "0")
+    again.wait_for_function("window.__local.offersCap === 0")
+    assert again.inner_text("#offersStatus") == "Every new offer is added each sync."
     again.close()
 
 
-def test_a_cap_that_is_not_a_choice_is_read_as_25(browser):
+def test_a_cap_that_is_not_a_choice_is_read_as_every_new_offer(browser):
     t = open_settings(browser, local={"offersCap": 400})
     t.wait_for_selector("#offersSites input")
-    t.wait_for_function("document.getElementById('offersCap').value === '25'")
+    t.wait_for_function("document.getElementById('offersCap').value === '0'")
     t.close()
 
 

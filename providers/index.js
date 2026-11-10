@@ -26,7 +26,8 @@ export const PROVIDERS = [
     "offers": {
       "file": "providers/amex.offers.js"
     },
-    "downloadWaitSeconds": 90
+    "downloadWaitSeconds": 90,
+    "postsAfterDays": 1
   },
   {
     "id": "apple",
@@ -63,7 +64,8 @@ export const PROVIDERS = [
         "Choose Trust when Apple asks, so you aren't asked for a code every time.",
         "Statement Sweep goes on by itself once you're in."
       ]
-    }
+    },
+    "postsAfterDays": 1
   },
   {
     "id": "bilt",
@@ -77,7 +79,8 @@ export const PROVIDERS = [
     "family": "click",
     "fileHosts": [
       "statements.cardless.com"
-    ]
+    ],
+    "postsAfterDays": 1
   },
   {
     "id": "chase",
@@ -99,7 +102,8 @@ export const PROVIDERS = [
         "Sign in to Chase here.",
         "Statement Sweep finds your statements by itself once you're in."
       ]
-    }
+    },
+    "postsAfterDays": 1
   },
   {
     "id": "chasebusiness",
@@ -133,7 +137,8 @@ export const PROVIDERS = [
     "pageFile": "providers/coinbase.page.js",
     "fileName": "{date} Coinbase {title}.pdf",
     "family": "click",
-    "downloadWaitSeconds": 90
+    "downloadWaitSeconds": 90,
+    "postsAfterDays": 1
   },
   {
     "id": "fidelity",
@@ -145,7 +150,8 @@ export const PROVIDERS = [
     "listUrl": "https://digitalservices.fidelity.com/navigate/ent-documentcenter/statements?poe=fidcom",
     "pageFile": "providers/fidelity.page.js",
     "fileName": "{date} Fidelity {title}.pdf",
-    "family": "fetch"
+    "family": "fetch",
+    "postsAfterDays": 4
   },
   {
     "id": "firsthorizon",
@@ -157,7 +163,8 @@ export const PROVIDERS = [
     "pageFile": "providers/firsthorizon.page.js",
     "fileName": "{date} First Horizon Bank {title}.pdf",
     "family": "click",
-    "downloadWaitSeconds": 60
+    "downloadWaitSeconds": 60,
+    "postsAfterDays": 1
   },
   {
     "id": "ibkr",
@@ -177,7 +184,8 @@ export const PROVIDERS = [
         "Sign in to Interactive Brokers here, with your usual second step.",
         "Statement Sweep goes on by itself once you're in."
       ]
-    }
+    },
+    "postsAfterDays": 3
   },
   {
     "id": "irs",
@@ -217,7 +225,8 @@ export const PROVIDERS = [
         "Sign in to NetBenefits here.",
         "Statement Sweep goes on by itself once you're in."
       ]
-    }
+    },
+    "postsAfterDays": 18
   },
   {
     "id": "optum",
@@ -239,7 +248,8 @@ export const PROVIDERS = [
     "listUrl": "https://www.paypal.com/myaccount/statements/monthly",
     "pageFile": "providers/paypal.page.js",
     "fileName": "{date} PayPal Monthly Statement.pdf",
-    "family": "fetch"
+    "family": "fetch",
+    "postsAfterDays": 15
   },
   {
     "id": "robinhood",
@@ -253,7 +263,8 @@ export const PROVIDERS = [
     "family": "click",
     "fileHosts": [
       "mountain-storage.s3.amazonaws.com"
-    ]
+    ],
+    "postsAfterDays": 5
   },
   {
     "id": "sdge",
@@ -264,7 +275,8 @@ export const PROVIDERS = [
     "listUrl": "https://myenergycenter.com/portal/BillingHistory/index",
     "pageFile": "providers/sdge.page.js",
     "fileName": "{date} SDG&E Utility Bill.pdf",
-    "family": "fetch"
+    "family": "fetch",
+    "postsAfterDays": 0
   },
   {
     "id": "shelbycounty",
@@ -349,7 +361,8 @@ export const PROVIDERS = [
     "listUrl": "https://account.venmo.com/statement",
     "pageFile": "providers/venmo.page.js",
     "fileName": "{date} Venmo {title}.pdf",
-    "family": "print"
+    "family": "print",
+    "postsAfterDays": 8
   },
   {
     "id": "wealthfront",

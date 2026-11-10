@@ -33,8 +33,9 @@ to any folder you choose.
 For American Express, Chase and Chase Business, Statement Sweep can also add
 your card offers after it saves that site's statements. It is off until you
 turn it on for a site in Settings. It presses only each offer's own add
-control, at most 25 a site per sync and a few seconds apart, and stops at any
-sign-out or security check. It never adds an offer twice.
+control, a few seconds apart, and stops at any sign-out or security check.
+A site's first sync adds every offer it has; later syncs add only new ones.
+It never adds an offer twice, and Settings can limit it to 10 or 25 a sync.
 
 Nothing leaves your browser. See the [privacy policy](PRIVACY.md).
 

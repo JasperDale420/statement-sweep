@@ -10,5 +10,6 @@
   "family": "click",
   "fileHosts": [
     "mountain-storage.s3.amazonaws.com"
-  ]
+  ],
+  "postsAfterDays": 5
 }

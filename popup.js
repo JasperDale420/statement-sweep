@@ -1,6 +1,6 @@
 import { PROVIDERS } from "./providers/index.js";
 import { askFor, getFolder } from "./folders.js";
-import { gapKey, gapWords, keysFor, localIso, needsRun, rankOf, recordOf, siteStatus, stateOf, statusWords } from "./cadence.js";
+import { gapKey, gapWords, keysFor, localIso, needsRun, rankOf, standingOf, stateOf, statusWords } from "./cadence.js";
 import { OFFERS_ON, detailsKey, hasOffers, liveDetails, offerCounts } from "./offers.js";
 import { countWords, percent, runProgress } from "./progress.js";
 
@@ -321,7 +321,7 @@ async function draw() {
   offersOn = Array.isArray(stored[OFFERS_ON]) ? stored[OFFERS_ON] : [];
   offerDetails = Object.fromEntries(offerSites.map((p) => [p.id, liveDetails(stored[detailsKey(p.id)], today)]));
   drawFooter();
-  standing = Object.fromEntries(PROVIDERS.map((p) => [p.id, siteStatus(recordOf(stored, p.id), today)]));
+  standing = Object.fromEntries(PROVIDERS.map((p) => [p.id, standingOf(stored, p, today)]));
   const busy = busyIn(board);
   const hasResults = Object.keys(board).length > 0;
   // First draw after opening: tick the sites that need updating.
