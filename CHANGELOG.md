@@ -5,6 +5,10 @@ What changed for people using Statement Sweep, newest first. The version is
 
 ## Unreleased
 
+- While syncing, each site has a progress bar and the whole sync has one,
+  with "about" totals from past syncs until a site's list is read. Stop
+  ends the sync and keeps what was saved, and sites keep one order while
+  it runs.
 - Card offers for American Express, Chase and Chase Business, off until
   turned on per site in Settings.
 - New-tab and print-to-PDF saving, per-site run logs, and an on-screen guide

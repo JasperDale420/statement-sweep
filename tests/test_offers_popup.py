@@ -105,8 +105,10 @@ def test_the_offers_line_is_its_own_and_only_it_turns_orange(tab):
     chase = tab.locator("li:has(button[aria-label='Run Chase']) .offers-line")
     assert chase.inner_text() == "Offers stopped: Chase asked you to confirm it is you. 3 added before that."
     assert chase.get_attribute("data-kind") == "stopped"
-    # The site stays done: its statements saved.
-    assert "Chase" in base.names_under(tab, "ok") and tab.locator("section[data-state=bad]").count() == 0
+    # The site stays done: its statements saved. (Amex still works, so the
+    # sites stay in the sync's one list, and none is among the stopped.)
+    assert "Chase" in base.names_under(tab, "run") and tab.locator("section[data-state=bad]").count() == 0
+    assert tab.locator("li:has(button[aria-label='Run Chase']) .state").get_attribute("data-state") == "ok"
     assert tab.locator("li:has(button[aria-label='Run Chase']) .say").inner_text() == "1 new."
     # Orange, light-dark(#b34700, ...) in ui.css, while the statements' words stay grey.
     assert chase.evaluate("(el) => getComputedStyle(el).color") == "rgb(179, 71, 0)"

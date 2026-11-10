@@ -12,6 +12,20 @@
   #summary[data-kind=stopped] { color: var(--red); }
   #settings { grid-column: 2; grid-row: 1 / 3; align-self: start; }
   #go { grid-column: 1 / 3; margin-top: 10px; width: 100%; }
+  /* Progress: a bar for the whole sync under the summary, and one under each
+     site's line. A bar with no number yet moves in stripes. */
+  #allbar { grid-column: 1 / 3; margin-top: 6px; }
+  .bar { height: 4px; border-radius: 2px; background: var(--separator); overflow: hidden; }
+  .bar > div { height: 100%; width: var(--pct, 0%); min-width: 4px; border-radius: 2px; background: var(--accent); transition: width 400ms ease-out; }
+  .bar[data-kind=needs_you] > div { background: var(--orange); }
+  .bar[data-kind=bad] > div { background: var(--secondary); }
+  .bar[data-unknown] > div { width: 100%; background: repeating-linear-gradient(-45deg, var(--accent) 0 6px, color-mix(in srgb, var(--accent) 45%, transparent) 6px 12px); background-size: 17px 4px; animation: sheen 900ms linear infinite; }
+  .progress { grid-column: 2 / 5; display: flex; align-items: center; gap: 8px; margin: 3px 6px 3px 23px; }
+  li.has-show .progress { grid-column: 2 / 6; }
+  .progress .bar { flex: 1; }
+  .progress span { color: var(--secondary); font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  @keyframes sheen { from { background-position: 0 0; } to { background-position: 17px 0; } }
+  @media (prefers-reduced-motion: reduce) { .bar > div { transition: none; } .bar[data-unknown] > div { animation: none; } }
   #scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 12px 14px; scrollbar-width: thin; scrollbar-color: var(--separator-strong) transparent; }
   section + section { margin-top: 14px; }
   h2 { margin: 0 4px 5px; color: var(--secondary); font-size: 11px; line-height: 14px; font-weight: 600; }
@@ -73,6 +87,7 @@
     <button class="icon" id="settings" type="button" aria-label="Settings" title="Settings">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5h6M11.5 5h2M2.5 11h2M7.5 11h6"/><circle cx="10" cy="5" r="1.5"/><circle cx="6" cy="11" r="1.5"/></svg>
     </button>
+    <div class="bar" id="allbar" role="progressbar" aria-label="Whole sync" hidden><div></div></div>
     <button class="primary" id="go" type="button">Get New Documents</button>
   </header>
   <main id="scroll" tabindex="-1"></main>

@@ -63,6 +63,10 @@ def names_under(tab, state):
     return tab.locator(f"section[data-state='{state}'] .name").all_inner_texts()
 
 
+def names_in_site_order(tab):
+    return tab.evaluate("async () => (await import('/providers/index.js')).PROVIDERS.map((p) => p.name)")
+
+
 def test_before_any_run_it_says_how_many_sites_need_updating(tab):
     # With no history every site needs updating, so every one not switched off is ticked.
     show(tab, off=["amex", "chase"])
@@ -75,10 +79,15 @@ def test_before_any_run_it_says_how_many_sites_need_updating(tab):
 
 def test_what_needs_you_comes_first_and_is_named_at_the_top(tab):
     show(tab, {"alpaca": st("ok", "Nothing new."), "coinbase": st("working", "Looking…"), "chase": st("needs_you", "Sign in to Chase in its tab. This goes on by itself."), "irs": st("bad", "Stopped waiting for you to sign in.")})
-    assert headings(tab) == ["Needs You", "In Progress", "Stopped", "Done", "Not Run Yet"]
+    # While the sync goes, only a site that needs you leaves the run's list.
+    assert headings(tab) == ["Needs You", "This Sync", "Not in This Sync"]
     assert names_under(tab, "needs_you") == ["Chase"]
+    assert sorted(names_under(tab, "run")) == ["Alpaca", "Coinbase", "IRS"]
     assert tab.inner_text("#summary") == "Chase needs you"
     assert tab.get_attribute("#summary", "data-kind") == "attention"
+    # Once it ends, the sites group by how they ended.
+    show(tab, {"alpaca": st("ok", "Nothing new."), "chase": st("needs_you", "Sign in to Chase in its tab. This goes on by itself.") | {"state": "bad"}, "irs": st("bad", "Stopped waiting for you to sign in.")})
+    assert headings(tab) == ["Stopped", "Done", "Not Run Yet"]
 
 
 def test_several_sites_needing_you_are_counted(tab):
@@ -86,11 +95,58 @@ def test_several_sites_needing_you_are_counted(tab):
     assert tab.inner_text("#summary") == "2 sites need you"
 
 
-def test_while_working_nothing_can_be_started(tab):
+def test_while_working_nothing_can_be_started_and_the_button_stops_it(tab):
     show(tab, {"coinbase": st("working", "Saving 1 of 2…")})
     assert tab.inner_text("#summary") == "Working on Coinbase…"
-    assert tab.is_disabled("#go") and tab.inner_text("#go") == "Working…"
     assert tab.locator(".one:not(:disabled)").count() == 0
+    assert tab.inner_text("#go") == "Stop" and not tab.is_disabled("#go")
+    assert tab.get_attribute("#go", "class") == "secondary"
+    tab.click("#go")
+    assert tab.evaluate("__sent.filter(m => m && m.type)") == [{"type": "stop"}]
+    assert tab.inner_text("#go") == "Stopping…" and tab.is_disabled("#go")
+
+
+def prog(done, total, exact):
+    return {"progress": {"done": done, "total": total, "exact": exact}}
+
+
+def bar_of(tab, name):
+    return tab.locator(f"li:has(button[aria-label='Run {name}']) .progress")
+
+
+def test_each_site_in_the_sync_has_a_bar_and_the_sync_has_one(tab):
+    show(tab, {"amex": st("ok", "2 new.") | prog(2, 2, True) | {"run": 5},
+               "chase": st("working", "Saving 2 of 5…") | prog(1, 5, True) | {"run": 5},
+               "coinbase": st("working", "Looking…") | prog(0, 3, False) | {"run": 5},
+               "irs": st("working", "Looking…") | prog(0, None, False) | {"run": 5},
+               "sdge": st("ok", "9 new.") | prog(9, 9, True) | {"run": 1}})
+    # The whole sync adds up this run's sites only, and says "about" while any is a guess.
+    assert tab.inner_text("#summary") == "Working on 3 sites… · 3 of about 10"
+    assert tab.is_visible("#allbar") and tab.get_attribute("#allbar", "aria-valuenow") == "30"
+    chase = bar_of(tab, "Chase")
+    assert chase.inner_text() == "1 of 5"
+    assert chase.locator(".bar").get_attribute("aria-valuenow") == "20"
+    assert chase.locator(".bar").get_attribute("aria-valuetext") == "1 of 5"
+    assert bar_of(tab, "Coinbase").inner_text() == "0 of about 3"
+    # No number yet: the bar moves in stripes and says no value.
+    irs = bar_of(tab, "IRS").locator(".bar")
+    assert irs.get_attribute("data-unknown") == "" and irs.get_attribute("aria-valuenow") is None
+    # A site that finished has its check, not a bar; a line from an older run has neither.
+    assert bar_of(tab, "American Express").count() == 0 and bar_of(tab, "SDG&E").count() == 0
+
+
+def test_a_site_waiting_for_you_has_an_orange_bar_and_a_stopped_one_keeps_where_it_got(tab):
+    show(tab, {"chase": st("needs_you", "Sign in to Chase in its tab.") | prog(0, 1, False),
+               "amex": st("bad", "3 saved. You stopped the sync. The rest wait for next time.") | prog(3, 5, True)})
+    assert bar_of(tab, "Chase").locator(".bar").get_attribute("data-kind") == "needs_you"
+    amex = bar_of(tab, "American Express")
+    assert amex.inner_text() == "3 of 5" and amex.locator(".bar").get_attribute("data-kind") == "bad"
+
+
+def test_with_nothing_going_there_is_no_sync_bar(tab):
+    show(tab, {"amex": st("ok", "2 new.") | prog(2, 2, True)})
+    assert not tab.is_visible("#allbar")
+    assert tab.inner_text("#go") == "Get New Documents" and tab.get_attribute("#go", "class") == "primary"
 
 
 def test_finished_results_are_added_up(tab):
@@ -263,9 +319,18 @@ def test_rows_are_ordered_by_what_needs_you(tab):
 
 
 def test_ordering_by_need_keeps_the_grouping_by_run_state(tab):
-    show(tab, {"chase": st("ok", "1 new."), "irs": st("working", "Looking…")}, local=LATE)
-    assert headings(tab) == ["In Progress", "Done", "Not Run Yet"]
-    assert names_under(tab, "ok") == ["Chase"] and names_under(tab, "working") == ["IRS"]
+    show(tab, {"chase": st("ok", "1 new."), "irs": st("bad", "Skipped.")}, local=LATE)
+    assert headings(tab) == ["Stopped", "Done", "Not Run Yet"]
+    assert names_under(tab, "ok") == ["Chase"] and names_under(tab, "bad") == ["IRS"]
+    assert names_under(tab, "")[:3] == ["American Express", "PayPal", "SDG&E"]
+
+
+def test_while_a_sync_goes_its_sites_keep_one_order(tab):
+    # Done or still going, the run's sites stay where they are; the rest keep their order by need.
+    show(tab, {"irs": st("working", "Looking…"), "chase": st("ok", "1 new.")}, local=LATE)
+    assert headings(tab) == ["This Sync", "Not in This Sync"]
+    run = names_under(tab, "run")
+    assert sorted(run) == ["Chase", "IRS"] and run == [n for n in names_in_site_order(tab) if n in run]
     assert names_under(tab, "")[:3] == ["American Express", "PayPal", "SDG&E"]
 
 
