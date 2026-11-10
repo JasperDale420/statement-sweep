@@ -59,7 +59,7 @@ FILES = """async () => {
   const out = {};
   async function walk(d, p) { for await (const [n, h] of d.entries()) {
     if (h.kind === 'directory') await walk(h, p + n + '/');
-    else out[p + n] = await (await h.getFile()).text(); } }
+    else { try { out[p + n] = await (await h.getFile()).text(); } catch (e) { if (e.name !== 'NotFoundError') throw e; } } } }
   await walk(await navigator.storage.getDirectory(), '');
   return out;
 }"""
@@ -382,7 +382,7 @@ START = """async ({ close, swap }) => {
     const out = {};
     async function walk(d, p) { for await (const [n, h] of d.entries()) {
       if (h.kind === 'directory') await walk(h, p + n + '/');
-      else out[p + n] = await (await h.getFile()).text(); } }
+      else { try { out[p + n] = await (await h.getFile()).text(); } catch (e) { if (e.name !== 'NotFoundError') throw e; } } } }
     await walk(root, '');
     const summary = Object.keys(out).find((p) => /^Chosen\\/Statement Sweep\\/Logs\\/run-\\d{8}-\\d{6}\\.log$/.test(p));
     if ((summary && out[summary].includes('Run ended')) || Date.now() > until) return { files: out, board: __session.board, events: __events };

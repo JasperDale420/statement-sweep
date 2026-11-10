@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Build and privacy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: The site list matches the metas
+        run: |
+          python3 tools/build.py
+          git diff --exit-code -- providers/index.js manifest.json || {
+            echo "::error::providers/index.js or manifest.json is out of date. Run python3 tools/build.py and commit the result."
+            exit 1
+          }
+      - name: Nothing personal in the repository
+        run: python3 tools/privacy_check.py
+      - name: Every script parses
+        run: for f in *.js providers/*.js; do node --check "$f" || exit 1; done
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: Run the tests
+        run: python -m pytest -q -n auto --dist loadfile --tb=short

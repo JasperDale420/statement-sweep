@@ -42,7 +42,7 @@
   const TRIGGER = "[data-testid='tax-forms-account-view-dialog-trigger']";
   const DISMISS = "[data-testid='dismiss-dialog']";
   const DIALOG = "[role='dialog'], [aria-modal='true'], dialog";
-  // /documents/87543673/document/DOCD-AA18 and
+  // /documents/90000017/document/DOCD-AA18 and
   // /documents/<id>/<year>/FORM_1099_PDF?idx=0, the two shapes seen.
   const DOC_PATH = /^\/documents\/[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
   const DOC_QUERY = /^(\?idx=[0-9]{1,3})?$/;
