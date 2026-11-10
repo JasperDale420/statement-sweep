@@ -8,5 +8,6 @@
   "listUrl": "https://digitalservices.fidelity.com/navigate/ent-documentcenter/statements?poe=fidcom",
   "pageFile": "providers/fidelity.page.js",
   "fileName": "{date} Fidelity {title}.pdf",
-  "family": "fetch"
+  "family": "fetch",
+  "postsAfterDays": 4
 }

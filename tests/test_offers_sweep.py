@@ -93,7 +93,9 @@ def test_turned_on_they_are_added_after_the_statements_and_kept(browser):
     assert adds(got) == ["1111:o1", "1111:o2"]
     assert (got["board"]["fake"]["state"], got["board"]["fake"]["text"]) == ("ok", "1 new.")
     assert got["board"]["fake"]["offers"] == {"kind": "done", "text": "Added 2 offers · 1 already on your card."}
-    assert got["local"]["offers:fake"] == {"added": ["1111:o1", "1111:o2"], "seen": ["1111:o3"], "left": []}
+    assert {k: v for k, v in got["local"]["offers:fake"].items() if k != "full"} == {"added": ["1111:o1", "1111:o2"], "seen": ["1111:o3"], "left": []}
+    # Every offer found was added, so the site's first, full sync is done.
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", got["local"]["offers:fake"]["full"])
     assert "fake: Offers: 2 added, 0 left, 0 not added." in site
     assert "Invented Shop" not in site
     # The statement was saved before any offer was looked at.

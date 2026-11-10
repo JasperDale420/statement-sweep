@@ -25,10 +25,13 @@
 //   - nextCard(), optional, moves to the next card with the site's own card
 //     switcher: {moved: true}, {moved: false} when every card is done, or {why}.
 //
-// What is known is kept as offers:<site>, {added: [ids], seen: [ids], left: [ids]}:
+// What is known is kept as offers:<site>, {added: [ids], seen: [ids], left: [ids], full?}:
 // `added` the offers Statement Sweep pressed and saw added, `seen` those the
 // site already showed as added, and `left` those it asked more for. An offer
-// in any of them is never pressed again. It stays in chrome.storage.local.
+// in any of them is never pressed again. `full` is the day a sync first went
+// through every card and added all it found: until then a sync is the site's
+// first, full one; after it, each sync adds only offers that are new. It
+// stays in chrome.storage.local.
 //
 // What each card showed on the last run is kept beside it, for the Card
 // Offers page, as offerDetails:<site>:
@@ -42,12 +45,14 @@
 import { localIso } from "./cadence.js";
 
 export const OFFERS_ON = "offersOn";
-// A careful pace: at most this many presses a site each sync, the rest left
-// for the next sync, and a few seconds, never the same, between presses, as a
-// person would. Settings says both (offers-settings.js), and lets you choose
-// fewer a sync (offersCap), never more.
-export const MAX_PRESSES = 25;
-export const CAP_CHOICES = [10, 25];
+// A careful pace: a few seconds, never the same, between presses, as a person
+// would. Each sync adds every offer not yet added, so a site's first sync adds
+// all it has (often hundreds), and later syncs only the new ones. Settings
+// can limit that to 10 or 25 a sync (offersCap; 0 is every new offer), and no
+// sync ever presses more than MAX_PRESSES on a site, the rest left for the next.
+export const MAX_PRESSES = 500;
+export const ALL = 0;
+export const CAP_CHOICES = [ALL, 10, 25];
 export const OFFERS_CAP = "offersCap";
 export const PACE_MS = [1500, 4000];
 export const offersKey = (id) => `offers:${id}`;
@@ -62,11 +67,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export const paceMs = (random = Math.random) => Math.round(PACE_MS[0] + random() * (PACE_MS[1] - PACE_MS[0]));
 const pace = () => sleep(paceMs());
 
-// How many presses a site gets each sync: the one you chose in Settings, or
-// the most allowed.
-export async function capOf() {
+// The choice in Settings: ALL (every new offer, the default), 10 or 25.
+export async function capChoice() {
   const { [OFFERS_CAP]: cap } = await chrome.storage.local.get(OFFERS_CAP);
-  return CAP_CHOICES.includes(cap) ? Math.min(cap, MAX_PRESSES) : MAX_PRESSES;
+  return CAP_CHOICES.includes(cap) ? cap : ALL;
+}
+// How many presses a site gets each sync, from that choice.
+export const pressesFor = (choice) => (choice === ALL ? MAX_PRESSES : Math.min(choice, MAX_PRESSES));
+export async function capOf() {
+  return pressesFor(await capChoice());
 }
 
 // Soonest to end first, and an offer that says no end last, each in the
@@ -177,19 +186,23 @@ const nextCard = () => (globalThis.__offers.nextCard ? globalThis.__offers.nextC
 async function record(provider) {
   const key = offersKey(provider.id);
   const kept = (await chrome.storage.local.get(key))[key] || {};
-  return { added: new Set(kept.added || []), seen: new Set(kept.seen || []), left: new Set(kept.left || []) };
+  const full = /^\d{4}-\d{2}-\d{2}$/.test(kept.full || "") ? kept.full : "";
+  return { added: new Set(kept.added || []), seen: new Set(kept.seen || []), left: new Set(kept.left || []), full };
 }
+// The day a site's first full sync finished, or "".
+export const fullOf = (kept) => (kept && /^\d{4}-\d{2}-\d{2}$/.test(kept.full || "") ? kept.full : "");
 const known = (kept, id) => kept.added.has(id) || kept.seen.has(id) || kept.left.has(id);
 
 // Joined with what is stored now, and kept to the newest KEEP of each.
-async function keep(provider, { added = [], seen = [], left = [] }) {
+async function keep(provider, { added = [], seen = [], left = [], full = "" }) {
   const key = offersKey(provider.id);
   const now = await record(provider);
   for (const id of added) { now.added.delete(id); now.added.add(id); now.left.delete(id); }
   for (const id of seen) if (!now.added.has(id)) { now.seen.delete(id); now.seen.add(id); now.left.delete(id); }
   for (const id of left) { now.left.delete(id); now.left.add(id); }
   const last = (set) => [...set].slice(-KEEP);
-  await chrome.storage.local.set({ [key]: { added: last(now.added), seen: last(now.seen), left: last(now.left) } });
+  const day = now.full || full;
+  await chrome.storage.local.set({ [key]: { added: last(now.added), seen: last(now.seen), left: last(now.left), ...(day ? { full: day } : {}) } });
 }
 
 // How many offers Statement Sweep has added for a site, for Settings.
@@ -243,13 +256,24 @@ export function makeOffers({ loaded, tabChange, onHost, pause = pace, log = () =
   // far. It stops at the first sign-out or check, and never waits for you:
   // that is the statements' part.
   async function run(tabId, provider, { ours, cap, progress = async () => {} }) {
-    const sum = { added: 0, already: 0, left: 0, failed: 0, cards: 0, passed: 0, capped: false, waiting: 0, more: false, why: "", notes: [] };
+    const sum = { added: 0, already: 0, left: 0, failed: 0, cards: 0, passed: 0, capped: false, waiting: 0, more: false, why: "", notes: [], first: false, full: false };
     const most = Math.min(Number(cap) || (await capOf()), MAX_PRESSES);
     // A tab of yours is never sent anywhere.
     if (!ours) {
       sum.why = "Offers are added only in a tab Statement Sweep opened. Close this site's tab and sync again.";
       return sum;
     }
+    // The site's first, full sync until one has gone through every card.
+    sum.first = !(await record(provider)).full;
+    // Every card read and every offer found added or answered for: from now
+    // on each sync adds only the new ones. One that did not add is tried again.
+    const finish = async () => {
+      if (sum.first && !sum.why && !sum.capped && !sum.failed) {
+        await keep(provider, { full: localIso() });
+        sum.full = true;
+      }
+      return sum;
+    };
     let presses = 0, inARow = 0, lastWhy = "";
     for (let cards = 0; cards < MAX_CARDS; cards += 1) {
       const read = await readWhenDrawn(tabId, provider);
@@ -280,7 +304,7 @@ export function makeOffers({ loaded, tabChange, onHost, pause = pace, log = () =
         // Never two presses back to back.
         if (presses > 0) await pause();
         if (!(await onSite(tabId, provider))) { sum.why = `The tab left ${provider.name}'s site.`; return sum; }
-        await progress(`Adding offers · ${i + 1} of ${planned} on ${label}`);
+        await progress(`${sum.first ? "First sync · adding every offer" : "Adding new offers"} · ${i + 1} of ${planned} on ${label}`);
         presses += 1;
         let r;
         try { r = await inOffers(tabId, provider, addOne, [offer]); } catch (e) { r = { ok: false, why: "The page changed while an offer was added." }; }
@@ -305,11 +329,11 @@ export function makeOffers({ loaded, tabChange, onHost, pause = pace, log = () =
           if (inARow >= FAILS_IN_A_ROW) { sum.why = `${inARow} offers in a row would not add. ${lastWhy}`.trim(); return sum; }
         }
       }
-      if (!read.more) return sum;
+      if (!read.more) return finish();
       let next;
       try { next = await inOffers(tabId, provider, nextCard); } catch (e) { next = { why: "The page changed while moving to the next card." }; }
       if (!next || next.why) { sum.why = (next && next.why) || "The next card could not be shown."; return sum; }
-      if (!next.moved) return sum;
+      if (!next.moved) return finish();
     }
     sum.notes.push("There were more cards than expected. The rest are added next time.");
     return sum;
@@ -336,7 +360,8 @@ export function offersWords(sum) {
     return { kind: "capped", text: end(`${plural(sum.added, "offer")} added · ${wait} wait for the next sync`), stopped: false };
   }
   const parts = [];
-  if (sum.added) parts.push(`Added ${plural(sum.added, "offer")}`);
+  // The first full sync says so; after it, what it adds is what was new.
+  if (sum.added) parts.push(`Added ${plural(sum.added, sum.first ? "offer" : "new offer")}`);
   if (sum.already) parts.push(`${sum.already} already on your ${sum.already === 1 ? "card" : "cards"}`);
   const none = sum.cards && sum.passed === sum.cards ? "No card of this kind is in this sign-in, so no offers were added." : "No new offers.";
   let text = parts.length ? `${parts.join(" · ")}.` : none;

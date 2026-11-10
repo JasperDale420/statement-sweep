@@ -234,8 +234,10 @@ export const gapKey = (g) => `${g.after}|${g.before}`;
 // How many days after its own date a site's document usually appears, learned
 // from the day each new one was saved (arrived:<site>). Only arrivals within
 // one cycle of their date count, so the first sweep's back catalogue, saved
-// years late, teaches nothing. Two at least, or 0.
-export function postingLag(arrived = {}, dates = {}, cadence = null, skip = new Set()) {
+// years late, teaches nothing. Two at least; until then `usual`, the site's
+// own typical delay (postsAfterDays in its meta, from when its "statement
+// ready" emails arrive), or 0.
+export function postingLag(arrived = {}, dates = {}, cadence = null, skip = new Set(), usual = 0) {
   if (!cadence) return 0;
   const lags = [];
   for (const [id, on] of Object.entries(arrived)) {
@@ -245,14 +247,16 @@ export function postingLag(arrived = {}, dates = {}, cadence = null, skip = new 
     const lag = a - d;
     if (lag >= 0 && lag <= cadence) lags.push(lag);
   }
-  return lags.length >= 2 ? Math.round(median(lags.slice(-12))) : 0;
+  if (lags.length >= 2) return Math.round(median(lags.slice(-12)));
+  return Number.isInteger(usual) && usual > 0 && usual < cadence ? usual : 0;
 }
 
 // After a sweep finds nothing new, how long before the site is flagged again:
 // a quarter of its cycle, 3 to 7 days.
 export const recheckDays = (cadence) => Math.min(7, Math.max(3, Math.round((cadence || 28) / 4)));
 
-export function siteStatus({ ids = [], dates = {}, tax = [], gapsOk = [], arrived = {}, checked = "" } = {}, today) {
+// `postsAfter` is the site's typical posting delay (postingLag's `usual`).
+export function siteStatus({ ids = [], dates = {}, tax = [], gapsOk = [], arrived = {}, checked = "" } = {}, today, { postsAfter = 0 } = {}) {
   const now = todayDay(today);
   const taxIds = new Set(tax);
   const all = new Set([...ids, ...Object.keys(dates)]);
@@ -276,7 +280,7 @@ export function siteStatus({ ids = [], dates = {}, tax = [], gapsOk = [], arrive
   const ageDays = newestDay === null ? null : now - newestDay;
   // A site that posts its statements some days after their date is judged
   // from when they usually appear, not from the date printed on them.
-  const lagDays = postingLag(arrived, dates, cadence, taxIds);
+  const lagDays = postingLag(arrived, dates, cadence, taxIds, postsAfter);
   const late = ageDays === null ? null : ageDays - lagDays;
   let status;
   if (!documents) status = NEVER;
@@ -389,6 +393,9 @@ export function statusWords(s, today, { skipped = false } = {}) {
   }
   return parts.join(" · ");
 }
+
+// A site's standing from what is stored, with its own typical posting delay.
+export const standingOf = (stored, provider, today) => siteStatus(recordOf(stored, provider.id), today, { postsAfter: provider.postsAfterDays || 0 });
 
 // -- the stored record --------------------------------------------------------------
 // chrome.storage.local keys for one site: the ids saved, their dates, and

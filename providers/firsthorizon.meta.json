@@ -8,5 +8,6 @@
   "pageFile": "providers/firsthorizon.page.js",
   "fileName": "{date} First Horizon Bank {title}.pdf",
   "family": "click",
-  "downloadWaitSeconds": 60
+  "downloadWaitSeconds": 60,
+  "postsAfterDays": 1
 }

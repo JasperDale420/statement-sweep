@@ -14,5 +14,6 @@
       "Choose Trust when Apple asks, so you aren't asked for a code every time.",
       "Statement Sweep goes on by itself once you're in."
     ]
-  }
+  },
+  "postsAfterDays": 1
 }

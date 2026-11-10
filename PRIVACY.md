@@ -25,8 +25,9 @@ card offers, one site at a time (American Express, Chase and Chase Business).
 Each is off unless you turn it on. Then, after that site's statements are
 saved, the sweep opens the site's own offers page in the same tab and presses
 each offer's own add control, as you would. It never presses anything that
-buys, applies, enrolls you in a product, upgrades or accepts terms. It adds at
-most 25 offers a site each sync, a few seconds apart, and stops at once if the
+buys, applies, enrolls you in a product, upgrades or accepts terms. It adds
+every offer not yet added (at most 500 a site each sync, or the 10 or 25 you
+choose), a few seconds apart, and stops at once if the
 site signs you out or asks you to confirm something. Chase personal cards and
 Chase business cards are kept apart: each is added to only by its own site.
 

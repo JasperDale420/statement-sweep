@@ -5,7 +5,7 @@ import { PROVIDERS } from "./providers/index.js";
 import { pathFor } from "./naming.js";
 import { makeCapture } from "./capture.js";
 import { INBOX, getFolder, isGranted, moveFromInbox, withinChosen, writeFile } from "./folders.js";
-import { backfillFor, documentDate, isDue, isTaxDocument, keysFor, localIso, recordOf, siteStatus } from "./cadence.js";
+import { backfillFor, documentDate, isDue, isTaxDocument, keysFor, localIso, standingOf } from "./cadence.js";
 import { amount, cleanUrl, errorText, makeLogs } from "./log.js";
 import { OFFERS_WAIT, hasOffers, makeOffers, offersWanted, offersWords } from "./offers.js";
 import { addFound, estimateNew, foundKey, foundOf, siteProgress } from "./progress.js";
@@ -72,7 +72,7 @@ async function dueBadge() {
   const writes = Object.assign({}, ...PROVIDERS.map((p) => backfillFor(stored, p.id)));
   if (Object.keys(writes).length) await chrome.storage.local.set(writes);
   const today = localIso();
-  const due = PROVIDERS.filter((p) => !off.includes(p.id) && isDue(siteStatus(recordOf(stored, p.id), today)));
+  const due = PROVIDERS.filter((p) => !off.includes(p.id) && isDue(standingOf(stored, p, today)));
   if (running) return;
   await chrome.action.setBadgeBackgroundColor({ color: "#0071e3" }).catch(() => {});
   await chrome.action.setBadgeText({ text: due.length ? String(due.length) : "" }).catch(() => {});
@@ -839,7 +839,7 @@ async function sweep(provider, together = false) {
   // Its bar: an estimate from its past syncs until its lists are read.
   const fkey = foundKey(provider.id);
   const kept = await chrome.storage.local.get([fkey, ...keysFor(provider.id)]);
-  const estimate = estimateNew(foundOf(kept, provider.id), siteStatus(recordOf(kept, provider.id), localIso()));
+  const estimate = estimateNew(foundOf(kept, provider.id), standingOf(kept, provider, localIso()));
   let listed = 0;
   let more = true;
   const track = () => progressFor.set(provider.id, siteProgress({ done: count + failed, listed, more, estimate }));
@@ -1112,7 +1112,7 @@ async function whyChosen(message, off) {
   logs.runLine(message.only ? `Run of one site: ${message.only}.` : asked ? `Get New Documents asked for ${asked.length} site(s): ${asked.join(", ") || "none"}.` : "Every ticked site.");
   for (const p of PROVIDERS) {
     if (message.only && p.id !== message.only) continue;
-    const s = siteStatus(recordOf(stored, p.id), today);
+    const s = standingOf(stored, p, today);
     const standing = `${s.status}, ${s.documents} saved, newest ${s.newest || "none"}, ${s.cadence || "no cadence"}${s.expected ? `, next expected ${s.expected}` : ""}`;
     const chosen = message.only ? p.id === message.only : !off.includes(p.id) && (!asked || asked.includes(p.id));
     const why = chosen ? "chosen" : off.includes(p.id) ? "left out: switched off" : "left out: Get New Documents did not ask for it (up to date)";

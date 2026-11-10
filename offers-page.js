@@ -5,7 +5,7 @@
 // browser's own storage; nothing is fetched.
 import { PROVIDERS } from "./providers/index.js";
 import { localIso } from "./cadence.js";
-import { OFFERS_CAP, OFFERS_ON, SOON_DAYS, capOf, detailsKey, hasOffers, liveDetails, offerCounts, offersKey, soonestFirst } from "./offers.js";
+import { ALL, OFFERS_CAP, OFFERS_ON, SOON_DAYS, capChoice, detailsKey, fullOf, hasOffers, liveDetails, offerCounts, offersKey, soonestFirst } from "./offers.js";
 
 const $ = (id) => document.getElementById(id);
 const sites = PROVIDERS.filter(hasOffers);
@@ -114,7 +114,8 @@ async function draw() {
   const provider = sites.find((p) => p.id === site);
   const today = localIso();
   const stored = await chrome.storage.local.get([OFFERS_ON, detailsKey(provider.id), offersKey(provider.id)]);
-  const cap = await capOf();
+  const cap = await capChoice();
+  const full = fullOf(stored[offersKey(provider.id)]);
   const on = (stored[OFFERS_ON] || []).includes(provider.id);
   const details = liveDetails(stored[detailsKey(provider.id)], today);
   const n = offerCounts(details, today);
@@ -185,7 +186,7 @@ async function draw() {
     ? waiting.map((o) => row(o, { soon: Boolean(o.expires) && daysUntil(o.expires, today) <= SOON_DAYS }))
     : [emptyRow("Nothing waiting", "Every offer this card shows is on it.")]));
   $("waitingNote").textContent = on
-    ? `Added on the next sync, up to ${cap} a site, a few seconds apart. Soonest to expire first.`
+    ? `Added on the next sync${cap === ALL ? (full ? ", every new one" : ", every one, in this site's first full sync") : `, up to ${cap} a site`}, a few seconds apart. Soonest to expire first.`
     : "Turn on Add when syncing to have these added, soonest to expire first.";
 
   $("addedHead").textContent = `Added · ${added.length}`;
