@@ -3,7 +3,10 @@
 // Documents and never counted on the toolbar badge. Saved as soon as it is
 // changed, apart from the folder and name settings' Save button, since it
 // changes no file. The popup's own ticks only choose what to run that time.
-import { PROVIDERS } from "./providers/index.js";
+import { SITES as PROVIDERS, loadSites } from "./sites.js";
+
+// The sites you added are swept, and switched off, like the rest.
+await loadSites();
 
 const $ = (id) => document.getElementById(id);
 const list = $("sitesList");
@@ -51,6 +54,7 @@ $("gapsReset").addEventListener("click", async () => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (changes.off) draw();
+  if (changes.addedSites) loadSites().then(draw);
   if (Object.keys(changes).some((k) => k.startsWith("gapsOk:"))) drawGaps();
 });
 draw();

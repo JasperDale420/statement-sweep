@@ -1,4 +1,5 @@
-import { PROVIDERS } from "./providers/index.js";
+// Built-in sites and the ones you added (sites.js), loaded on each draw.
+import { SITES as PROVIDERS, loadSites } from "./sites.js";
 import { askFor, getFolder } from "./folders.js";
 import { gapKey, gapWords, keysFor, localIso, needsRun, rankOf, shortDate, standingOf, stateOf, statusWords } from "./cadence.js";
 import { OFFERS_ON, detailsKey, hasOffers, liveDetails, offerCounts } from "./offers.js";
@@ -385,6 +386,7 @@ function drawFooter() {
 }
 
 async function draw() {
+  await loadSites();
   const { board = {} } = await chrome.storage.session.get("board");
   const offerSites = PROVIDERS.filter(hasOffers);
   const stored = await chrome.storage.local.get(["off", ...PROVIDERS.flatMap((p) => keysFor(p.id)), OFFERS_ON, ...offerSites.map((p) => detailsKey(p.id))]);
