@@ -2,80 +2,111 @@
 <html lang="en">
 <head><meta charset="utf-8"><title>Statement Sweep Settings</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="ui.css">
 <style>
-  :root { color-scheme: light dark; --ink: light-dark(#1d1d1f, #f5f5f7); --muted: light-dark(#6e6e73, #a1a1a6);
-    --bg: light-dark(#fff, #2a2a2c); --field: light-dark(#fff, #1f1f21); --tint: light-dark(#f5f5f7, #323234);
-    --line: light-dark(#d2d2d7, #48484a); --accent: #0a66d9; --bad: light-dark(#b3261e, #ff8a80); --ok: light-dark(#1b7f3b, #6fdc8c); }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-  main { max-width: 620px; margin: 0 auto; padding: 32px 16px 56px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .lead { color: var(--muted); margin: 0 0 24px; }
-  label { display: block; font-weight: 600; margin: 18px 0 4px; }
-  input, select { width: 100%; min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px;
-    background: var(--field); color: var(--ink); font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; }
-  select { font-family: inherit; }
-  input:disabled { opacity: .55; }
-  .hint { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
-  .panel { margin-top: 24px; padding: 12px 14px; border-radius: 8px; background: var(--tint); }
-  .panel h2 { font-size: 13px; margin: 0 0 4px; color: var(--muted); font-weight: 600; }
-  #preview { display: block; font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
-  #problem { color: var(--bad); font-weight: 600; margin: 12px 0 0; }
+  html { background: var(--window); }
+  body { margin: 0; }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px 96px; }
+  h1 { margin: 0 0 2px; font-size: 22px; line-height: 28px; font-weight: 700; }
+  .lead { margin: 0 0 22px; color: var(--secondary); }
+  h2 { margin: 22px 4px 6px; font-size: 13px; line-height: 18px; font-weight: 600; }
+  .group { border-radius: var(--radius); background: var(--group); box-shadow: 0 0 0 .5px var(--separator); }
+  .row { display: grid; grid-template-columns: 148px 1fr; gap: 6px 16px; align-items: center; padding: 10px 14px; }
+  .row + .row { border-top: 1px solid var(--separator); }
+  .row > label { font-size: 13px; }
+  .row .wide { grid-column: 2; }
+  .hint { grid-column: 2; margin: 0; color: var(--secondary); font-size: 12px; line-height: 16px; }
+  input, select { width: 100%; min-height: 28px; padding: 3px 8px; border: 1px solid var(--separator-strong); border-radius: 6px; background: var(--field); color: var(--ink); font: 13px/18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  input.pattern { font-family: var(--mono); font-size: 12px; }
+  input::placeholder { color: var(--secondary); opacity: 1; }
+  .hint:empty { display: none; }
+  #insert { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .chip { min-height: 24px; padding: 0 10px; border: 0; border-radius: 12px; background: var(--hover); font-size: 12px; transition: background-color 150ms ease-out; }
+  .chip:hover { background: var(--press); }
+  #preview { display: block; font: 12px/17px var(--mono); overflow-wrap: anywhere; }
+  #problem { margin: 0; color: var(--red); font-weight: 500; }
   #problem:empty { display: none; }
-  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
-  dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 6px 0 0; font-size: 13px; }
-  dd { margin: 0; color: var(--muted); }
-  .actions { display: flex; align-items: center; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
-  button { min-height: 36px; padding: 0 16px; border-radius: 8px; font: 600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; cursor: pointer; }
-  #save { border: 0; background: var(--accent); color: #fff; }
-  #save:disabled { opacity: .5; cursor: default; }
-  #reset { border: 1px solid var(--line); background: none; color: var(--ink); }
-  #status { color: var(--muted); }
-  #status[data-kind=ok] { color: var(--ok); }
-  :focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
+  .example { display: grid; gap: 4px; padding: 10px 14px; }
+  details { margin-top: 12px; }
+  summary { padding: 2px 4px; color: var(--accent-ink); cursor: default; width: fit-content; border-radius: 4px; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 8px 4px 0; font-size: 12px; line-height: 16px; }
+  dt { font-family: var(--mono); }
+  dd { margin: 0; color: var(--secondary); }
+  .actions { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; margin: 24px -16px 0; padding: 12px 16px; background: color-mix(in srgb, var(--window) 88%, transparent); backdrop-filter: blur(12px); border-top: 1px solid var(--separator); }
+  #status { margin-right: auto; color: var(--secondary); }
+  #status[data-kind=ok] { color: var(--green); }
+  @media (max-width: 520px) {
+    .row { grid-template-columns: 1fr; }
+    .row .wide, .hint { grid-column: 1; }
+  }
 </style></head>
 <body>
 <main>
   <h1>Settings</h1>
   <p class="lead">Where documents are saved and what they are called. Changes apply to documents saved from now on.</p>
 
-  <label for="base">Main folder</label>
-  <input id="base" spellcheck="false" autocomplete="off">
-  <p class="hint">Inside Chrome's Downloads folder. To save somewhere else entirely, change the download location in Chrome's settings.</p>
+  <h2>Location</h2>
+  <div class="group">
+    <div class="row">
+      <label for="base">Main Folder</label>
+      <input id="base" spellcheck="false" autocomplete="off">
+      <p class="hint">Inside Chrome's Downloads folder. To save somewhere else entirely, change the download location in Chrome's settings.</p>
+    </div>
+  </div>
 
-  <label for="scope">Apply the two patterns below to</label>
-  <select id="scope"></select>
+  <h2>Organization</h2>
+  <div class="group">
+    <div class="row">
+      <label for="scope">Applies To</label>
+      <select id="scope"></select>
+    </div>
+    <div class="row">
+      <label for="folderPreset">Folders</label>
+      <select id="folderPreset"></select>
+      <input id="folder" class="pattern wide" spellcheck="false" autocomplete="off" aria-label="Folder pattern">
+    </div>
+    <div class="row">
+      <label for="filePreset">File Names</label>
+      <select id="filePreset"></select>
+      <input id="file" class="pattern wide" spellcheck="false" autocomplete="off" aria-label="File name pattern">
+      <p class="hint" id="filehint"></p>
+    </div>
+    <div class="row">
+      <span id="insertLabel">Insert</span>
+      <div id="insert" role="group" aria-labelledby="insertLabel">
+        <button class="chip" type="button" data-insert="{date}">Date</button>
+        <button class="chip" type="button" data-insert="{year}">Year</button>
+        <button class="chip" type="button" data-insert="{month}">Month</button>
+        <button class="chip" type="button" data-insert="{day}">Day</button>
+        <button class="chip" type="button" data-insert="{provider}">Site</button>
+        <button class="chip" type="button" data-insert="{title}">Title</button>
+      </div>
+    </div>
+  </div>
 
-  <label for="folder">Folder pattern</label>
-  <input id="folder" spellcheck="false" autocomplete="off">
-  <p class="hint">Use / for folders inside folders, such as <code>{provider}/{year}</code>.</p>
-
-  <label for="file">File name pattern</label>
-  <input id="file" spellcheck="false" autocomplete="off">
-  <p class="hint" id="filehint"></p>
-
-  <div class="panel" aria-live="polite">
-    <h2 id="previewhead">Example</h2>
+  <h2 id="previewhead">Example</h2>
+  <div class="group example" aria-live="polite">
     <output id="preview" for="base folder file"></output>
     <p id="problem" role="alert"></p>
   </div>
 
-  <div class="panel">
-    <h2>What you can use</h2>
+  <details>
+    <summary>Pattern Reference</summary>
     <dl>
-      <dt><code>{date}</code></dt><dd>2026-10-28, the document's date</dd>
-      <dt><code>{date:mmm yyyy}</code></dt><dd>Oct 2026. Build your own from yyyy, yy, mmmm, mmm, mm and dd</dd>
-      <dt><code>{year}</code> <code>{month}</code> <code>{day}</code></dt><dd>2026, 10 and 28</dd>
-      <dt><code>{provider}</code></dt><dd>The site's name, such as Chase Business</dd>
-      <dt><code>{title}</code></dt><dd>What the site calls it, which can include the account</dd>
-      <dt><code>[ - {title}]</code></dt><dd>Square brackets: left out when a field inside has no value</dd>
+      <dt>{date}</dt><dd>2026-10-28, the document's date</dd>
+      <dt>{date:mmm yyyy}</dt><dd>Oct 2026. Build your own from yyyy, yy, mmmm, mmm, mm and dd</dd>
+      <dt>{year} {month} {day}</dt><dd>2026, 10 and 28</dd>
+      <dt>{provider}</dt><dd>The site's name, such as Chase Business</dd>
+      <dt>{title}</dt><dd>What the site calls it, which can include the account</dd>
+      <dt>[ - {title}]</dt><dd>Square brackets: left out when a field inside has no value</dd>
+      <dt>/</dt><dd>In the folder pattern, a folder inside a folder</dd>
     </dl>
-  </div>
+  </details>
 
   <div class="actions">
-    <button id="save" type="button">Save</button>
-    <button id="reset" type="button">Restore defaults</button>
     <span id="status" role="status"></span>
+    <button class="secondary" id="reset" type="button">Restore Defaults</button>
+    <button class="primary" id="save" type="button">Save</button>
   </div>
 </main>
 <script src="options.js" type="module"></script>

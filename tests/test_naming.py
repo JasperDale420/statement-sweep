@@ -7,7 +7,7 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = "https://x.test/"
-TYPES = {".js": "text/javascript", ".html": "text/html"}
+TYPES = {".js": "text/javascript", ".html": "text/html", ".css": "text/css"}
 AMEX = {"id": "amex", "name": "American Express", "fileName": "{date} American Express {title}.pdf"}
 SDGE = {"id": "sdge", "name": "SDG&E", "fileName": "{date} SDG&E Utility Bill.pdf"}
 DOC = {"id": "x", "date": "2026-10-28", "title": "Monthly Statement"}
@@ -162,6 +162,42 @@ def test_a_bad_pattern_on_another_site_still_blocks_save(tab):
     tab.fill("#file", "{nope}")
     tab.select_option("#scope", "")
     assert "American Express" in tab.inner_text("#problem") and tab.is_disabled("#save")
+
+
+def test_a_preset_fills_the_pattern_and_the_menu_follows_typing(tab):
+    settings(tab)
+    assert tab.input_value("#folderPreset") == "{provider}"
+    tab.select_option("#folderPreset", label="By Site and Year")
+    assert tab.input_value("#folder") == "{provider}/{year}"
+    assert "/American Express/2026/" in tab.inner_text("#preview")
+    tab.fill("#folder", "Mine/{year}")
+    assert tab.locator("#folderPreset option:checked").inner_text() == "Custom"
+
+
+def test_one_site_can_go_back_to_the_general_pattern(tab):
+    settings(tab)
+    tab.select_option("#scope", "amex")
+    assert tab.locator("#filePreset option:checked").inner_text() == "Same as All Sites"
+    tab.select_option("#filePreset", label="Site, Date, Title")
+    assert tab.input_value("#file") == "{provider} {date}[ {title}]"
+    tab.select_option("#filePreset", label="Same as All Sites")
+    assert tab.input_value("#file") == ""
+
+
+def test_an_insert_button_adds_a_field_at_the_caret(tab):
+    settings(tab)
+    tab.fill("#file", "ab")
+    tab.evaluate("document.getElementById('file').setSelectionRange(1, 1)")
+    tab.click(".chip[data-insert='{year}']")
+    assert tab.input_value("#file") == "a{year}b"
+    assert tab.evaluate("document.activeElement.id") == "file"
+
+
+def test_an_insert_button_goes_to_the_folder_pattern_when_that_was_last_used(tab):
+    settings(tab)
+    tab.fill("#folder", "x/")
+    tab.click(".chip[data-insert='{provider}']")
+    assert tab.input_value("#folder") == "x/{provider}"
 
 
 def test_saved_settings_come_back_and_restore_needs_save(tab):
