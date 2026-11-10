@@ -7,5 +7,13 @@
   "listUrl": "https://apps2.shelbycountytrustee.com/Parcel",
   "pageFile": "providers/shelbycounty.page.js",
   "fileName": "{date} Shelby County Trustee {title}.pdf",
-  "family": "fetch"
+  "family": "fetch",
+  "guide": {
+    "waiting": [
+      "Search by owner, address or parcel number.",
+      "Open your parcel.",
+      "Statement Sweep remembers it and does this by itself next time."
+    ]
+  },
+  "mainFile": "providers/shelbycounty.main.js"
 }

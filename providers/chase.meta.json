@@ -4,8 +4,14 @@
   "match": [
     "https://secure.chase.com/*"
   ],
-  "listUrl": "https://secure.chase.com/web/auth/dashboard#/dashboard/documents/myDocs/index",
+  "listUrl": "https://secure.chase.com/web/auth/dashboard#/dashboard/documents/myDocs/index;mode=documents",
   "pageFile": "providers/chase.page.js",
   "fileName": "{date} Chase {title} Statement.pdf",
-  "family": "click"
+  "family": "click",
+  "guide": {
+    "signIn": [
+      "Sign in to Chase here.",
+      "Statement Sweep finds your statements by itself once you're in."
+    ]
+  }
 }

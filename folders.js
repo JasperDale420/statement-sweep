@@ -58,13 +58,15 @@ async function freeName(dir, name) {
 }
 
 // Writes under `path`, making its folders, never over a file already there,
-// and only returns once what landed is as long as what was sent.
-export async function writeFile(root, path, blob) {
+// and only returns once what landed is as long as what was sent. `replace`
+// writes over the file of that name instead: only a run's own log (log.js),
+// which is written again as the run goes, ever asks for it.
+export async function writeFile(root, path, blob, { replace = false } = {}) {
   const parts = path.split("/");
   const fileName = parts.pop();
   let dir = root;
   for (const part of parts) dir = await dir.getDirectoryHandle(part, { create: true });
-  const name = await freeName(dir, fileName);
+  const name = replace ? fileName : await freeName(dir, fileName);
   const handle = await dir.getFileHandle(name, { create: true });
   const out = await handle.createWritable();
   await out.write(blob);
@@ -75,5 +77,10 @@ export async function writeFile(root, path, blob) {
 
 export async function moveFromInbox(inbox, stageName, root, path) {
   const file = await (await inbox.getFileHandle(stageName)).getFile();
+  // A statement must be a PDF by its bytes, whatever the site labelled it.
+  if (/\.pdf$/i.test(path)) {
+    const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+    if (String.fromCharCode(...head) !== "%PDF-") throw new Error("The site sent something that is not a PDF.");
+  }
   return writeFile(root, path, file);
 }

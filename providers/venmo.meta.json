@@ -7,6 +7,5 @@
   "listUrl": "https://account.venmo.com/statement",
   "pageFile": "providers/venmo.page.js",
   "fileName": "{date} Venmo {title}.pdf",
-  "family": "print",
-  "enabled": false
+  "family": "print"
 }

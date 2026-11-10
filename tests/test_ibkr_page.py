@@ -87,6 +87,35 @@ def test_a_sign_in_is_known(tab, url, body):
     assert read(tab) == {"state": "signed_out"}
 
 
+def test_the_expired_page_sends_a_sweeps_own_tab_to_the_real_sign_in_once(tab):
+    load(tab, "/AccountManagement/x", "<title>Your Session Has Expired.</title><p>x</p>")
+    tab.evaluate("sessionStorage.clear()")
+    with tab.expect_navigation():
+        assert tab.evaluate("__sweep.readList({walk: true})") == {"state": "signed_out"}
+    assert tab.url == HOST + "/sso/Login"
+    # Landing on the expired page again within the minute does not send it again.
+    load(tab, "/AccountManagement/x", "<title>Your Session Has Expired.</title><p>x</p>")
+    assert tab.evaluate("__sweep.readList({walk: true})") == {"state": "signed_out"}
+    tab.wait_for_timeout(300)
+    assert tab.url.endswith("/AccountManagement/x")
+
+
+def test_the_expired_page_is_left_alone_in_your_own_tab(tab):
+    load(tab, "/AccountManagement/x", "<title>Your Session Has Expired.</title><p>x</p>")
+    tab.evaluate("sessionStorage.clear()")
+    assert tab.evaluate("__sweep.readList({walk: false})") == {"state": "signed_out"}
+    tab.wait_for_timeout(300)
+    assert tab.url.endswith("/AccountManagement/x")
+
+
+def test_the_real_sign_in_page_is_never_left(tab):
+    load(tab, "/sso/Login", "<title>Your Session Has Expired.</title><input type=password>")
+    tab.evaluate("sessionStorage.clear()")
+    assert tab.evaluate("__sweep.readList({walk: true})") == {"state": "signed_out"}
+    tab.wait_for_timeout(300)
+    assert tab.url == HOST + "/sso/Login"
+
+
 def test_a_security_check_is_known(tab):
     load(tab, "/sso/Dispatcher", "<p>Open the IBKR notification on your phone</p>")
     assert read(tab) == {"state": "challenge"}
@@ -97,15 +126,27 @@ def test_throttling_stops(tab):
     assert read(tab)["state"] == "stopped"
 
 
-def test_the_portal_is_not_the_list(tab):
+def test_the_portal_in_a_tab_of_yours_asks_to_be_carried_on_in(tab):
+    # Signed in, on IBKR's portal: a second sign-in elsewhere would end this
+    # one, so the engine takes this tab over rather than open another.
     load(tab, "/portal/", "<h1>Portfolio</h1>")
+    assert read(tab)["state"] == "ready"
+
+
+@pytest.mark.parametrize("host", ["ndcdyn.interactivebrokers.com", "www.interactivebrokers.co.uk"])
+def test_the_portal_on_a_regional_server_goes_to_statements_on_that_server(tab, host):
+    # After sign-in IBKR moves the tab to a regional server such as ndcdyn.
+    # In the sweep's own tab it goes to Statements there, once.
+    load(tab, f"https://{host}/portal/?loginType=1#/dashboard", "<h1>Portfolio</h1>")
+    got = tab.evaluate("__sweep.readList({walk: true})")
+    assert got == {"state": "walking"}
+    tab.wait_for_url(f"https://{host}/AccountManagement/**")
+    assert "action=RM_STATEMENTS" in tab.url
+
+
+def test_a_host_that_only_ends_like_ibkr_is_not_it(tab):
+    load(tab, "https://interactivebrokers.com.example.test/portal/", "<h1>Portfolio</h1>")
     assert read(tab) == {"state": "no_list"}
-
-
-def test_a_regional_site_says_so_rather_than_be_sent_to_dot_com(tab):
-    load(tab, "https://www.interactivebrokers.co.uk/portal/", "<h1>Portfolio</h1>")
-    got = read(tab)
-    assert got["state"] == "stopped" and "interactivebrokers.co.uk" in got["why"]
 
 
 def test_a_good_list_with_month_end_dates(tab):
@@ -157,7 +198,58 @@ def test_a_month_that_cannot_be_read_stops(tab):
 
 def test_a_label_and_value_that_disagree_stop(tab):
     load(tab, PAGE, statements(months=[["September, 2026", "202608"], ["August, 2026", "202608"], ["July, 2026", "202607"]]))
-    assert read(tab)["state"] == "stopped"
+    got = read(tab)
+    assert got["state"] == "stopped"
+    # The month that disagrees is left out, and the others are not cut short.
+    assert [d["code"] for d in got["docs"]] == ["202608", "202607"]
+
+
+MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July",
+               "August", "September", "October", "November", "December"]
+
+
+def every_month(first_year, last_year, last_month=12):
+    out = []
+    for year in range(last_year, first_year - 1, -1):
+        for month in range(12 if year < last_year else last_month, 0, -1):
+            out.append([f"{MONTH_NAMES[month - 1]}, {year}", f"{year}{month:02d}"])
+    return out
+
+
+def test_every_month_back_to_the_first_is_listed(tab):
+    # PaperPull reads the whole Date select under Monthly, back to the month
+    # the account opened, and so does this: ten years and nine months here.
+    months = every_month(2016, 2026, last_month=9)
+    load(tab, PAGE, statements(months=months))
+    got = read(tab)
+    assert got["state"] == "ok"
+    codes = [d["code"] for d in got["docs"]]
+    assert len(codes) == len(months) == 129
+    assert codes[0] == "202609" and codes[-1] == "201601"
+    assert {d["date"][:4] for d in got["docs"]} == {str(y) for y in range(2016, 2027)}
+
+
+def test_a_month_that_cannot_be_read_in_the_middle_does_not_cut_the_older_ones(tab):
+    # The dialog is known by its first three options being months, as in
+    # PaperPull, so the odd one sits after them.
+    months = MONTHS + [["Sometime, 2020", "202001"], ["January, 2024", "202401"]]
+    load(tab, PAGE, statements(months=months))
+    got = read(tab)
+    assert got["state"] == "stopped" and "left out" in got["why"]
+    assert [d["code"] for d in got["docs"]] == ["202609", "202608", "202402", "202401"]
+
+
+def test_ids_are_stable_unique_and_the_same_whether_or_not_it_may_walk(tab):
+    months = every_month(2024, 2026, last_month=9)
+    load(tab, PAGE, statements(months=months))
+    first = tab.evaluate("__sweep.readList({ walk: true })")
+    load(tab, PAGE, statements(months=months))
+    second = tab.evaluate("__sweep.readList({ walk: false })")
+    ids = [d["id"] for d in first["docs"]]
+    assert ids == [d["id"] for d in second["docs"]]
+    assert len(set(ids)) == len(ids) == len(months)
+    assert all(i == f"{ACCOUNT}-{m[1]}" for i, m in zip(ids, months))
+    assert "more" not in first and "more" not in second
 
 
 def name_passes(tab, doc, name):
@@ -239,3 +331,24 @@ def test_a_bad_month_is_refused(tab, doc):
     read(tab)
     assert tab.evaluate(f"__sweep.clickDoc({doc})")["ok"] is False
     assert tab.evaluate("window.pressed") == []
+
+
+def test_the_live_period_choices_without_annual_still_open_monthly(tab):
+    # Live (an account under a year old): Daily, Custom Date Range, Monthly,
+    # Month to Date, Year to Date. No Annual.
+    live = statements().replace("<option>Monthly</option><option>Annual</option>",
+                                "<option>Monthly</option><option>Month to Date</option><option>Year to Date</option>")
+    load(tab, PAGE, live)
+    got = read(tab)
+    assert got["state"] == "ok" and [d["code"] for d in got["docs"]] == ["202609", "202608", "202402"]
+
+
+def test_an_activity_statement_dialog_ibkr_reopened_is_used(tab):
+    # Live: IBKR reopens the last dialog it showed when Statements loads, and
+    # it covers the row. Its title says it is the Activity Statement's own.
+    load(tab, PAGE, statements())
+    tab.evaluate("dialog()")
+    got = read(tab)
+    assert got["state"] == "ok" and [d["code"] for d in got["docs"]] == ["202609", "202608", "202402"]
+    assert tab.evaluate("window.runs || 0") == 0
+

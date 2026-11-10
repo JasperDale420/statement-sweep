@@ -8,5 +8,8 @@
   "pageFile": "providers/statefarm.page.js",
   "fileName": "{date} State Farm {title}.pdf",
   "family": "fetch",
-  "enabled": false
+  "downloadWaitSeconds": 60,
+  "fileHosts": [
+    "documentinformationservice-prod-custdocmgmtweb.apps.gdrosa.redk8s.statefarm.com"
+  ]
 }

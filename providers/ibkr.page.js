@@ -47,7 +47,11 @@
   }
   const visible = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
   const optionsOf = (select) => Array.from(select.options, (o) => o.textContent.trim());
-  const isPeriods = (opts) => opts.includes("Monthly") && opts.includes("Annual");
+  // The Period dropdown offers Monthly with Daily and its other spans. Live,
+  // an account under a year old shows no Annual (Daily, Custom Date Range,
+  // Monthly, Month to Date, Year to Date), so Monthly plus any one other span.
+  const OTHER_SPANS = ["Annual", "Daily", "Custom Date Range", "Month to Date", "Year to Date"];
+  const isPeriods = (opts) => opts.includes("Monthly") && OTHER_SPANS.some((s) => opts.includes(s));
   const isMonths = (opts) => opts.length > 0 && opts.slice(0, 3).every((o) => MONTH_LABEL.test(o));
 
   function signedOut() {
@@ -64,15 +68,29 @@
 
   const inAccountManagement = () => location.protocol === "https:" && location.pathname.toLowerCase().includes("/accountmanagement/");
 
-  // The regional host is the one signed in, and the list address is .com.
-  function notHere() {
-    if (location.hostname === "www.interactivebrokers.com") return { state: "no_list" };
-    return {
-      state: "stopped",
-      why: `You are signed in on ${location.hostname}. Open Statements there yourself, then sweep again.`,
-      docs: [],
-    };
+  // After sign-in IBKR moves the tab to a regional server (ndcdyn and the
+  // like) and shows its portal. Statements live in Account Management on that
+  // same server. In a tab the sweep may walk, it goes there, at most once a
+  // minute so it can never loop; in a tab of yours it asks to carry on in it,
+  // since a second sign-in elsewhere would end this one.
+  const IBKR_HOST = /(^|\.)interactivebrokers\.(com|co\.uk|ie)$/i;
+  const statementsHere = () => `https://${location.hostname}/AccountManagement/AmAuthentication?action=RM_STATEMENTS`;
+  function notHere(walk) {
+    if (location.protocol !== "https:" || !IBKR_HOST.test(location.hostname)) return { state: "no_list" };
+    if (!walk) return { state: "ready", why: "Signed in to Interactive Brokers in this tab." };
+    try {
+      if (Date.now() - (Number(sessionStorage.getItem("statementSweepToStatements")) || 0) < 60000) {
+        return { state: "stopped", why: "Interactive Brokers did not open Statements. Open Statements in its tab, then run it again.", docs: [] };
+      }
+      sessionStorage.setItem("statementSweepToStatements", String(Date.now()));
+    } catch (e) {
+      return { state: "stopped", why: "Open Statements in Interactive Brokers' tab, then run it again.", docs: [] };
+    }
+    log(`On ${location.hostname}${location.pathname}: going to Statements on this server.`);
+    location.assign(statementsHere());
+    return { state: "walking" };
   }
+  const log = (text) => { try { if (typeof globalThis.__sweepLog === "function") globalThis.__sweepLog(text); } catch (e) { /* never stops a sweep */ } };
 
   function identityOf(select, opts) {
     const bits = ["aria-label", "name", "id", "title"].map((a) => select.getAttribute(a) || "");
@@ -131,18 +149,57 @@
   }
 
   // Leaves the Activity Statement dialog open on Monthly. Answers why not.
+  // The dialog a period dropdown sits in is the Activity Statement's own,
+  // by its title. IBKR reopens the last one it showed when Statements loads,
+  // so one already open may well be it.
+  const DIALOG_TITLE = /^\s*Activity Statement\s*$/i;
+  function isActivityDialog(select) {
+    const dialog = select.closest("[role='dialog'], .modal, .modal-dialog, .modal-content");
+    const title = dialog && dialog.querySelector(".modal-title, h1, h2, h3, h4, [role='heading']");
+    return Boolean(title && DIALOG_TITLE.test(title.textContent || ""));
+  }
+  const ownPeriod = () => {
+    const p = periodSelect();
+    if (p && !p.hasAttribute(OURS) && isActivityDialog(p)) {
+      log("The Activity Statement dialog was already open: using it.");
+      p.setAttribute(OURS, "1");
+    }
+    return p;
+  };
+  // What covers a control, for the log: its tag and first class only.
+  const coverOf = (el) => {
+    const box = el.getBoundingClientRect();
+    const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return top ? `${top.tagName.toLowerCase()}${top.classList[0] ? `.${top.classList[0]}` : ""}` : "nothing";
+  };
+
   async function openMonthly() {
-    let period = periodSelect();
+    let period = ownPeriod();
     if (period && !period.hasAttribute(OURS)) {
       return "Another statement's dialog is open on the page. Close it and sweep again.";
     }
     if (!period) {
       const run = await until(runControl, ROWS_WAIT_MS);
       if (!run) return "The Activity Statement row was not there.";
-      if (!press(run)) return "Something is covering the Activity Statement row. Close it and sweep again.";
-      period = await until(periodSelect, DIALOG_WAIT_MS);
-      if (!period) return "The Activity Statement dialog did not open.";
-      period.setAttribute(OURS, "1");
+      // A dialog IBKR is reopening, or its backdrop, can cover the row a moment.
+      let pressed = false;
+      const end = Date.now() + 8000;
+      while (!pressed && Date.now() < end) {
+        period = ownPeriod();
+        if (period) break;
+        pressed = press(run);
+        if (!pressed) await sleep(400);
+      }
+      if (!period && !pressed) {
+        log(`The Activity Statement row stayed covered by ${coverOf(run)}.`);
+        return "Something is covering the Activity Statement row. Close it and sweep again.";
+      }
+      if (!period) {
+        period = await until(ownPeriod, DIALOG_WAIT_MS);
+        if (!period) return "The Activity Statement dialog did not open.";
+        period.setAttribute(OURS, "1");
+      }
+      if (!period.hasAttribute(OURS)) return "Another statement's dialog is open on the page. Close it and sweep again.";
     }
     const selected = period.selectedOptions[0];
     if (!selected || !selected.textContent.includes("Monthly")) {
@@ -180,16 +237,41 @@
     return m ? m[1] : "";
   }
 
-  async function readList() {
-    if (signedOut()) return { state: "signed_out" };
+  // A signed-out visit to Statements lands on IBKR's "session has expired"
+  // page, whose own sign-in does not lead back here. In a tab the sweep opened,
+  // that page is left for IBKR's real sign-in, at most once a minute so it can
+  // never loop. After sign-in IBKR shows its portal, and the sweep goes on from
+  // there to Statements.
+  function goToSignIn() {
+    const expired = location.pathname.toLowerCase().includes("/accountmanagement/expire")
+      || document.title.toLowerCase().includes(EXPIRED_TITLE);
+    if (!expired || location.pathname.toLowerCase().startsWith("/sso/")) return;
+    try {
+      if (Date.now() - (Number(sessionStorage.getItem("statementSweepSignIn")) || 0) < 60000) return;
+      sessionStorage.setItem("statementSweepSignIn", String(Date.now()));
+    } catch (e) {
+      return;
+    }
+    location.assign(`https://${location.hostname}/sso/Login`);
+  }
+
+  async function readList({ walk } = {}) {
+    if (signedOut()) {
+      if (walk) goToSignIn();
+      return { state: "signed_out" };
+    }
     const body = (document.body && document.body.innerText) || "";
     const screen = `${document.title}\n${body.slice(0, 1500)}`.toLowerCase();
     if (CHALLENGE_MARKERS.some((m) => screen.includes(m))) return { state: "challenge" };
     if (RATE_LIMITS.some((re) => re.test(screen))) {
       return { state: "stopped", why: "Interactive Brokers says to slow down and try later.", docs: [] };
     }
-    if (!inAccountManagement()) return notHere();
-    if (!(await until(hasDefaultStatements, PAGE_WAIT_MS))) return signedOut() ? { state: "signed_out" } : notHere();
+    if (!inAccountManagement()) return notHere(walk);
+    if (!(await until(hasDefaultStatements, PAGE_WAIT_MS))) {
+      if (signedOut()) return { state: "signed_out" };
+      log("Account Management is open but shows no Default Statements.");
+      return { state: "stopped", why: "Interactive Brokers' Statements page did not show its statement list.", docs: [] };
+    }
 
     const stop = (why, docs = []) => ({ state: "stopped", why, docs });
     const account = accountOnPage();
@@ -197,24 +279,31 @@
     const problem = await openMonthly();
     if (problem) return stop(problem);
 
+    // Every month the list offers is read, back to the account's first. One
+    // that cannot be read is left out, as PaperPull leaves it, and the rest
+    // are still listed, so one odd option never cuts the older months short.
     const select = monthSelect();
     const values = Array.from(select.options, (o) => o.value);
     const docs = [];
     const labels = optionsOf(select);
+    let unread = 0, mismatched = 0;
     for (let i = 0; i < labels.length; i++) {
       const ym = monthOf(labels[i]);
-      if (!ym) return stop("A month in the list could not be read.", docs);
+      if (!ym) { unread += 1; continue; }
       const coded = MONTH_VALUE.exec((values[i] || "").trim());
-      if (coded && `${coded[1]}${coded[2]}` !== codeOf(ym)) {
-        return stop("A month's label and value name different months.", docs);
-      }
+      if (coded && `${coded[1]}${coded[2]}` !== codeOf(ym)) { mismatched += 1; continue; }
       docs.push({
         id: `${account}-${codeOf(ym)}`, date: monthEnd(ym), title: `Activity Statement ${account.slice(-4)}`,
         method: "click", account, code: codeOf(ym), nameMustMatch: nameMustMatch(account, codeOf(ym)),
       });
     }
-    if (!docs.length) return stop("The dialog listed no months.");
     docs.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    if (new Set(docs.map((d) => d.id)).size !== docs.length) {
+      return stop("The list names one month twice.", docs.filter((d, i) => docs.findIndex((e) => e.id === d.id) === i));
+    }
+    if (unread) return stop(`${unread === 1 ? "A month" : `${unread} months`} in the list could not be read, so ${unread === 1 ? "it was" : "they were"} left out.`, docs);
+    if (mismatched) return stop(`${mismatched === 1 ? "A month's" : `${mismatched} months'`} label and value name different months, so ${mismatched === 1 ? "it was" : "they were"} left out.`, docs);
+    if (!docs.length) return stop("The dialog listed no months.");
     return { state: "ok", docs };
   }
 

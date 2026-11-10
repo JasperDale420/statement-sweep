@@ -1,5 +1,6 @@
 """The Alpaca page logic, in a real Chromium, on stand-in pages."""
 from pathlib import Path
+import json
 import pytest
 from playwright.sync_api import sync_playwright
 
@@ -57,7 +58,6 @@ def test_kept_types_are_listed_newest_first_with_the_rest_passed_over(tab):
     assert [(d["id"], d["date"], d["title"], d["method"]) for d in got["docs"]] == [
         ("2026-09-30_account_statement", "2026-09-30", "Brokerage Statement", "click"),
         ("2026-09-30_crypto_account_statement", "2026-09-30", "Crypto Statement", "click"),
-        ("2026-09-30_trade_confirmation", "2026-09-30", "Trade Confirmation", "click"),
         ("2026-08-31_account_statement", "2026-08-31", "Brokerage Statement", "click"),
     ]
 
@@ -91,6 +91,81 @@ def test_a_paper_account_stops_and_nothing_is_listed(tab, body):
 def test_a_paper_account_sent_to_its_dashboard_stops_too(tab):
     load(tab, PAPER, path="/dashboard/overview")
     assert read(tab)["state"] == "stopped"
+
+
+# Alpaca's switcher, as seen on the real site (2026-11-09): a Live / Paper
+# choice at the top, the side's accounts, then New Paper Account, Account
+# Management and Sign Out. Choosing the live account turns the switcher Live.
+SWITCH_MENU = """
+<button data-testid="account-switcher-button" id="sw">Kronos Paper - PA3BOJ8T7GYS</button>
+<div id="menu" hidden>
+  <button id="liveSide">Live</button><button id="paperSide">Paper</button>
+  <div id="list"></div>
+  <button onclick="pressed.push('new')">New Paper Account</button>
+  <button onclick="pressed.push('manage')">Account Management</button>
+  <button onclick="pressed.push('signout')">Sign Out</button>
+</div>
+<p>You are on Paper Trading, no real money is being used.</p>
+<script>
+window.pressed = [];
+const LIVE_ACCOUNTS = %s;
+sw.onclick = () => { pressed.push('switcher'); menu.hidden = false; };
+paperSide.onclick = () => { pressed.push('paper'); list.innerHTML = '<div><p>Kronos</p><p>Paper Account PA3BOJ8T7GYS</p></div>'; };
+liveSide.onclick = () => {
+  pressed.push('live');
+  list.innerHTML = LIVE_ACCOUNTS.map(n => '<div class="card"><p>Kronos</p><p>$49,437.83</p><p>Brokerage Account ' + n + '</p></div>').join('');
+  for (const card of list.querySelectorAll('.card')) card.onclick = () => {
+    pressed.push('account');
+    if (window.staysPaper) return;
+    sw.textContent = 'Kronos Live - ' + card.textContent.match(/\\d{6,}/)[0];
+    menu.hidden = true;
+    document.querySelector('body > p').remove();
+  };
+};
+</script>"""
+
+
+def switch_page(tab, accounts=("900000001",), stays_paper=False):
+    load(tab, SWITCH_MENU % json.dumps(list(accounts)), path="/dashboard/overview")
+    tab.evaluate("sessionStorage.clear()")
+    if stays_paper:
+        tab.evaluate("window.staysPaper = true")
+
+
+def test_a_sweeps_own_tab_switches_from_paper_to_the_live_account(tab):
+    switch_page(tab)
+    assert tab.evaluate("__sweep.readList({walk: true})") == {"state": "walking"}
+    assert tab.evaluate("pressed") == ["switcher", "live", "account"]
+    assert "Live" in tab.inner_text("#sw")
+
+
+def test_switching_never_presses_the_menus_other_buttons(tab):
+    switch_page(tab)
+    tab.evaluate("__sweep.readList({walk: true})")
+    assert not set(tab.evaluate("pressed")) & {"new", "manage", "signout", "paper"}
+
+
+def test_without_walking_paper_still_stops_and_nothing_is_pressed(tab):
+    switch_page(tab)
+    got = tab.evaluate("__sweep.readList({walk: false})")
+    assert got["state"] == "stopped" and "Paper" in got["why"]
+    assert tab.evaluate("pressed") == []
+
+
+def test_two_live_accounts_are_left_for_the_person(tab):
+    switch_page(tab, accounts=("900000001", "555000111"))
+    got = tab.evaluate("__sweep.readList({walk: true})")
+    assert got["state"] == "stopped" and "more than one live account" in got["why"]
+    assert "account" not in tab.evaluate("pressed")
+
+
+def test_a_switch_that_does_not_take_stops_and_is_not_tried_again_at_once(tab):
+    switch_page(tab, stays_paper=True)
+    got = tab.evaluate("__sweep.readList({walk: true})")
+    assert got["state"] == "stopped" and "stayed on a Paper account" in got["why"]
+    tab.evaluate("pressed.length = 0")
+    got = tab.evaluate("__sweep.readList({walk: true})")
+    assert got["state"] == "stopped" and tab.evaluate("pressed") == []
 
 
 def test_another_page_is_not_the_list(tab):
@@ -150,3 +225,142 @@ def test_click_refuses_a_paper_account(tab):
     load(tab, page_of(GOOD, switcher=PAPER))
     assert tab.evaluate("__sweep.clickDoc({id: '2026-08-31_account_statement'})")["ok"] is False
     assert tab.evaluate("pressed") == []
+
+
+# A list drawn ten rows a page, as Alpaca draws it, its rows redrawn after
+# each Next or Previous. `delay` < 0 redraws at once, for long lists.
+def paged(rows, delay=40, endless=False, next_label="Next", switcher=LIVE, start=0):
+    data = [list(r) for r in rows]
+    return (f"{switcher}<table><thead><tr><th>Date</th><th>Document Type</th><th>Download</th></tr></thead>"
+            "<tbody></tbody></table>"
+            f"<button id=prev>Previous</button><button id=next>{next_label}</button>"
+            "<script>"
+            f"window.ALL={data!r};window.page={start};window.turns=[];window.pressed=[];"
+            f"const delay={delay}, endless={'true' if endless else 'false'};"
+            "const body=document.querySelector('tbody'), prev=document.getElementById('prev'), next=document.getElementById('next');"
+            "function press(p){pressed.push(p.closest('tr').cells[0].textContent+' '+p.closest('tr').cells[1].textContent)}"
+            "function grow(){while(endless&&ALL.length<(page+1)*10){const n=ALL.length;"
+            "const d=new Date(Date.UTC(2026,8,30)-n*86400000).toISOString().slice(0,10);ALL.push([d,'account_statement'])}}"
+            "function draw(){grow();body.innerHTML=ALL.slice(page*10,page*10+10).map(([d,k])=>"
+            "`<tr><td>${d}</td><td>${k}</td><td><p onclick='press(this)'>Download</p></td></tr>`).join('');"
+            "prev.disabled=page===0;next.disabled=!endless&&(page+1)*10>=ALL.length}"
+            "function go(step){turns.push(step);page+=step;body.innerHTML='';delay<0?draw():setTimeout(draw,delay)}"
+            "prev.onclick=()=>go(-1);next.onclick=()=>go(1);draw();"
+            "</script>")
+
+
+def days(n, kind="account_statement", start=(2026, 9, 30)):
+    from datetime import date, timedelta
+    first = date(*start)
+    return [((first - timedelta(days=i)).isoformat(), kind) for i in range(n)]
+
+
+def walk_all(tab, limit=50):
+    """Read every view, pressing what the engine would, and the views read."""
+    views = []
+    for _ in range(limit):
+        got = tab.evaluate("__sweep.readList({walk: true})")
+        views.append(got)
+        if not got.get("more"):
+            return views
+        assert tab.evaluate("__sweep.nextView()") == {"moved": True}
+    raise AssertionError("the walk did not end")
+
+
+TWENTY_THREE = days(20) + [("2026-08-31", "account_statement"), ("2026-07-31", "account_statement"),
+                           ("2026-07-31", "trade_confirmation_json")]
+
+
+def test_walking_counts_every_page_then_reads_each_from_the_last_back_to_the_first(tab):
+    load(tab, paged(TWENTY_THREE))
+    views = walk_all(tab)
+    assert [v["state"] for v in views] == ["ok", "ok", "ok"]
+    assert [bool(v.get("more")) for v in views] == [True, True, False]
+    assert tab.evaluate("turns") == [1, 1, -1, -1]
+    ids = [d["id"] for v in views for d in v["docs"]]
+    want = {f"{d}_{k}" for d, k in TWENTY_THREE if k != "trade_confirmation_json"}
+    assert len(ids) == len(set(ids)) == 22 and set(ids) == want
+    assert views[0]["docs"] == [
+        {"id": "2026-08-31_account_statement", "date": "2026-08-31", "title": "Brokerage Statement", "method": "click"},
+        {"id": "2026-07-31_account_statement", "date": "2026-07-31", "title": "Brokerage Statement", "method": "click"},
+    ]
+    assert tab.evaluate("window.__alpacaWalk") is None
+
+
+def test_a_walked_page_s_documents_are_pressed_on_that_page(tab):
+    load(tab, paged(TWENTY_THREE))
+    got = tab.evaluate("__sweep.readList({walk: true})")
+    assert got["more"] and tab.evaluate("page") == 2
+    assert tab.evaluate("__sweep.clickDoc({id: '2026-07-31_account_statement'})") == {"ok": True}
+    assert tab.evaluate("__sweep.clickDoc({id: '2026-09-30_account_statement'})")["ok"] is False
+    assert tab.evaluate("pressed") == ["2026-07-31 account_statement"]
+
+
+def test_one_page_walked_is_read_as_before(tab):
+    load(tab, paged(days(4)))
+    assert tab.evaluate("__sweep.readList({walk: true})") == {"state": "ok", "docs": [
+        {"id": f"{d}_{k}", "date": d, "title": "Brokerage Statement", "method": "click"} for d, k in days(4)]}
+    assert tab.evaluate("turns") == []
+
+
+def test_without_walking_the_list_is_left_on_its_first_page(tab):
+    load(tab, paged(TWENTY_THREE))
+    got = read(tab)
+    assert got["state"] == "stopped" and "first page of ten" in got["why"] and len(got["docs"]) == 10
+    assert tab.evaluate("turns") == [] and tab.evaluate("page") == 0
+
+
+def test_a_list_that_never_ends_stops_at_the_cap(tab):
+    load(tab, paged([], delay=-1, endless=True))
+    got = tab.evaluate("__sweep.readList({walk: true})")
+    assert got["state"] == "stopped" and "200 pages" in got["why"] and got["docs"] == []
+    assert len(tab.evaluate("turns")) == 199
+    assert tab.evaluate("window.__alpacaWalk") is None
+
+
+def test_two_alike_on_different_pages_are_both_left_and_said_at_the_end(tab):
+    rows = days(10) + [("2026-09-30", "account_statement"), ("2026-08-31", "account_statement")]
+    load(tab, paged(rows))
+    views = walk_all(tab)
+    ids = [d["id"] for v in views for d in v["docs"]]
+    assert "2026-09-30_account_statement" not in ids and "2026-08-31_account_statement" in ids and len(ids) == 10
+    assert views[-1]["state"] == "stopped" and "share one date and kind" in views[-1]["why"]
+
+
+def test_a_next_that_brings_the_same_rows_stops(tab):
+    load(tab, paged(TWENTY_THREE).replace("next.onclick=()=>go(1)", "next.onclick=()=>turns.push(1)"))
+    got = tab.evaluate("__sweep.readList({walk: true})")
+    assert got["state"] == "stopped" and "did not show other rows" in got["why"]
+
+
+def test_a_next_with_other_words_on_it_is_not_pressed(tab):
+    load(tab, paged(TWENTY_THREE).replace("<button id=next>", "<button id=next aria-label='Next order'>"))
+    got = tab.evaluate("__sweep.readList({walk: true})")
+    assert got["state"] == "stopped" and tab.evaluate("turns") == []
+
+
+def test_walking_from_a_later_page_stops_before_pressing(tab):
+    load(tab, paged(TWENTY_THREE, start=1))
+    got = tab.evaluate("__sweep.readList({walk: true})")
+    assert got["state"] == "stopped" and "first page" in got["why"] and tab.evaluate("turns") == []
+
+
+def test_a_list_changed_between_views_stops(tab):
+    load(tab, paged(TWENTY_THREE))
+    assert tab.evaluate("__sweep.readList({walk: true})")["more"]
+    tab.evaluate("ALL[10]=['2026-10-01','account_statement'];")
+    assert "did not go back" in tab.evaluate("__sweep.nextView()")["why"]
+    assert tab.evaluate("window.__alpacaWalk") is None
+    load(tab, paged(TWENTY_THREE))
+    assert tab.evaluate("__sweep.readList({walk: true})")["more"]
+    tab.evaluate("document.querySelector('tbody td').textContent='2026-10-02'")
+    got = tab.evaluate("__sweep.readList({walk: true})")
+    assert got["state"] == "stopped" and "changed" in got["why"]
+
+
+def test_a_paper_account_mid_walk_presses_nothing_more(tab):
+    load(tab, paged(TWENTY_THREE))
+    assert tab.evaluate("__sweep.readList({walk: true})")["more"]
+    tab.evaluate("document.querySelector('[data-testid=account-switcher-button]').textContent='X Paper - PA1'")
+    assert "Paper" in tab.evaluate("__sweep.nextView()")["why"]
+    assert tab.evaluate("turns") == [1, 1]

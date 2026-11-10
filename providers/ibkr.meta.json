@@ -2,13 +2,19 @@
   "id": "ibkr",
   "name": "Interactive Brokers",
   "match": [
-    "https://www.interactivebrokers.com/*",
-    "https://www.interactivebrokers.co.uk/*",
-    "https://www.interactivebrokers.ie/*"
+    "https://*.interactivebrokers.com/*",
+    "https://*.interactivebrokers.co.uk/*",
+    "https://*.interactivebrokers.ie/*"
   ],
   "listUrl": "https://www.interactivebrokers.com/AccountManagement/AmAuthentication?action=RM_STATEMENTS&service=AM.LOGIN&webaccess=true",
   "pageFile": "providers/ibkr.page.js",
   "fileName": "{date} Interactive Brokers {title}.pdf",
   "family": "click",
-  "downloadWaitSeconds": 90
+  "downloadWaitSeconds": 90,
+  "guide": {
+    "signIn": [
+      "Sign in to Interactive Brokers here, with your usual second step.",
+      "Statement Sweep goes on by itself once you're in."
+    ]
+  }
 }

@@ -1,5 +1,7 @@
 // Runs inside Nelnet's own page, where the sign-in already lives. It reads
-// Inbox & Statements and presses a row's own Download button, and nothing else.
+// Inbox & Statements and presses a row's own Download button. In a tab the
+// sweep opened it also presses the list's own pager, Go to first page and
+// Next Page, to read every page as PaperPull does, and nothing else.
 // A loan account can take a payment, so every button is read before a press.
 //
 // Nelnet's PDFs come from a second host that a request from this page cannot
@@ -20,6 +22,11 @@
   const CY = /^document-download-([A-Za-z0-9-]+)$/;
   const ID = /^[A-Za-z0-9-]+$/;
   const WAIT_MS = 12000;
+  const PAGER_WAIT_MS = 10000;
+  // PaperPull's _MAX_LIST_PAGES. Ten rows a page, so six hundred documents.
+  const MAX_PAGES = 60;
+  const NEXT = 'button[aria-label="Next Page"]';
+  const FIRST = 'button[aria-label="Go to first page"]';
 
   const FORBIDDEN = new RegExp("(\\bpay\\b|\\bpaying\\b|\\bpayments?\\b|make\\s+a\\s+payment|\\bschedul(e|es|ed|ing)\\b|"
     + "auto\\s*-?\\s*(pay|debit)|recurring|one[-\\s]?time|\\bbank\\b|routing|account\\s+number|\\bdebit\\b|\\bcard\\b|"
@@ -139,7 +146,68 @@
     return { docs };
   }
 
-  async function readList() {
+  // A pager button, only when the list draws exactly one. Its aria-label is
+  // the selector's own, whole; its title and text, which may be an icon's,
+  // must say nothing the guard refuses; and it must not submit a form.
+  function pager(selector) {
+    const found = Array.from(document.querySelectorAll(selector));
+    if (!found.length) return { none: true };
+    if (found.length > 1) return { why: "Nelnet's list shows its pager twice." };
+    const b = found[0];
+    const labels = [b.getAttribute("title"), b.textContent].map(tidy).filter(Boolean);
+    if (labels.some((l) => FORBIDDEN.test(l) || SETTINGS.test(l) || AUTH.test(l)) || (b.form && b.type === "submit")) {
+      return { why: "Nelnet's pager does not read as one this will press." };
+    }
+    return offNow(b) ? { none: true } : { button: b };
+  }
+  const nextPager = () => pager(NEXT);
+  const firstPager = () => pager(FIRST);
+
+  // Which rows are drawn now, by their own ids, so a press can be seen to
+  // have changed them.
+  const rowIds = () => documentRows().map((tr) => tr.querySelector(BUTTON).getAttribute("data-cy")).join("|");
+
+  async function waitFor(test, ms) {
+    const end = Date.now() + ms;
+    while (!test()) {
+      if (Date.now() >= end) return false;
+      await sleep(200);
+    }
+    return true;
+  }
+
+  // Where the walk through the pages has been, kept on the page between
+  // askings, since this file is run afresh each time.
+  const walk = () => (globalThis.__nelnetWalk = globalThis.__nelnetWalk || { started: false, first: false, pages: 1, listed: new Set() });
+
+  // Next Page, and a wait until the rows are the next page's, so the last
+  // page's rows are never read as this one's.
+  async function nextView() {
+    const w = walk();
+    const next = nextPager();
+    if (next.why) return { why: next.why };
+    if (next.none) {
+      delete globalThis.__nelnetWalk;
+      return { moved: false };
+    }
+    if (w.pages >= MAX_PAGES) return { why: `Nelnet's list runs past ${MAX_PAGES} pages.` };
+    const before = rowIds();
+    next.button.click();
+    if (!(await waitFor(() => documentRows().length > 0 && rowIds() !== before, PAGER_WAIT_MS))) {
+      return { why: "Nelnet's rows stayed the same after Next Page was pressed." };
+    }
+    w.pages += 1;
+    return { moved: true };
+  }
+
+  async function readList(options = {}) {
+    const result = await readPage(options);
+    if (result.state === "stopped" || (result.state === "ok" && !result.more)) delete globalThis.__nelnetWalk;
+    return result;
+  }
+
+  async function readPage({ walk: mayWalk = false } = {}) {
+    if (!mayWalk) delete globalThis.__nelnetWalk;
     const until = Date.now() + WAIT_MS;
     for (;;) {
       if (signedOut()) return { state: "signed_out" };
@@ -151,6 +219,7 @@
       if (Date.now() >= until) return { state: "stopped", why: "Nelnet's Inbox & Statements showed no documents.", docs: [] };
       await sleep(300);
     }
+    if (mayWalk) return walkPage();
     const { why, docs } = readRows();
     docs.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     if (why) return { state: "stopped", why, docs };
@@ -161,6 +230,36 @@
       return { state: "stopped", why: "Nelnet's list goes on past these rows, and this reads only its first page.", docs };
     }
     return { state: "ok", docs };
+  }
+
+  // A page of the walk. It starts from the list's first page, pressing Go to
+  // first page once if the list is drawn on another, and hands over each
+  // document once however often its page is read.
+  async function walkPage() {
+    const w = walk();
+    if (!w.started) {
+      const first = firstPager();
+      if (first.why) return { state: "stopped", why: first.why, docs: [] };
+      if (first.button) {
+        if (w.first) return { state: "stopped", why: "Nelnet's list did not go back to its first page.", docs: [] };
+        w.first = true;
+        const before = rowIds();
+        first.button.click();
+        await waitFor(() => rowIds() !== before, PAGER_WAIT_MS);
+        return { state: "walking" };
+      }
+      w.started = true;
+    }
+    const { why, docs: read } = readRows();
+    const docs = read.filter((d) => !w.listed.has(d.id));
+    docs.forEach((d) => w.listed.add(d.id));
+    docs.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    if (why) return { state: "stopped", why, docs };
+    const next = nextPager();
+    if (next.why) return { state: "stopped", why: next.why, docs };
+    // Once it has paged, the last page too says more, and Next Page, turned
+    // off, ends the walk.
+    return next.button || w.pages > 1 ? { state: "ok", docs, more: true } : { state: "ok", docs };
   }
 
   function clickDoc(doc) {
@@ -178,5 +277,5 @@
     return { ok: true };
   }
 
-  globalThis.__sweep = { readList, clickDoc };
+  globalThis.__sweep = { readList, clickDoc, nextView };
 })();

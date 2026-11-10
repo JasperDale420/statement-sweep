@@ -8,14 +8,14 @@
   body { margin: 0; }
   main { max-width: 640px; margin: 0 auto; padding: 32px 16px 96px; }
   h1 { margin: 0 0 2px; font-size: 22px; line-height: 28px; font-weight: 700; }
-  .lead { margin: 0 0 22px; color: var(--secondary); }
+  .lead { margin: 0 0 22px; color: var(--secondary); text-wrap: pretty; }
   h2 { margin: 22px 4px 6px; font-size: 13px; line-height: 18px; font-weight: 600; }
   .group { border-radius: var(--radius); background: var(--group); box-shadow: 0 0 0 .5px var(--separator); }
   .row { display: grid; grid-template-columns: 148px 1fr; gap: 6px 16px; align-items: center; padding: 10px 14px; }
   .row + .row { border-top: 1px solid var(--separator); }
   .row > label { font-size: 13px; }
   .row .wide { grid-column: 2; }
-  .hint { grid-column: 2; margin: 0; color: var(--secondary); font-size: 12px; line-height: 16px; }
+  .hint { grid-column: 2; margin: 0; color: var(--secondary); font-size: 12px; line-height: 16px; text-wrap: pretty; }
   input, select { width: 100%; min-height: 28px; padding: 3px 8px; border: 1px solid var(--separator-strong); border-radius: 6px; background: var(--field); color: var(--ink); font: 13px/18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
   input.pattern { font-family: var(--mono); font-size: 12px; }
   input::placeholder { color: var(--secondary); opacity: 1; }
@@ -23,6 +23,9 @@
   [hidden] { display: none !important; }
   .choice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .choice > span { margin-right: auto; font-weight: 500; overflow-wrap: anywhere; }
+  .folder { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .folder svg { flex: none; width: 16px; height: 16px; color: var(--secondary); }
+  #inboxState[data-kind=needed] { color: var(--orange); font-weight: 600; }
   .choice .secondary { min-height: 28px; padding: 0 12px; }
   #insert { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .chip { min-height: 24px; padding: 0 10px; border: 0; border-radius: 12px; background: var(--hover); font-size: 12px; transition: background-color 150ms ease-out; }
@@ -30,7 +33,7 @@
   #preview { display: block; font: 12px/17px var(--mono); overflow-wrap: anywhere; }
   #problem { margin: 0; color: var(--red); font-weight: 500; }
   #problem:empty, #locationProblem:empty { display: none; }
-  #locationProblem { margin: 8px 4px 0; color: var(--red); font-weight: 500; }
+  #locationProblem { margin: 6px 14px 0; color: var(--red); font-size: 12px; line-height: 16px; font-weight: 500; text-wrap: pretty; }
   .example { display: grid; gap: 4px; padding: 10px 14px; }
   details { margin-top: 12px; }
   summary { padding: 2px 4px; color: var(--accent-ink); cursor: default; width: fit-content; border-radius: 4px; }
@@ -38,11 +41,28 @@
   dt { font-family: var(--mono); }
   dd { margin: 0; color: var(--secondary); }
   .actions { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; margin: 24px -16px 0; padding: 12px 16px; background: color-mix(in srgb, var(--window) 88%, transparent); backdrop-filter: blur(12px); border-top: 1px solid var(--separator); }
+  #historyCount { color: var(--secondary); font-weight: 400; }
+  #historyProblem:empty, #historyStatus:empty { display: none; }
+  #historyProblem { margin: 6px 14px 0; color: var(--red); font-size: 12px; line-height: 16px; font-weight: 500; text-wrap: pretty; }
+  #historyStatus, #sitesStatus { margin: 6px 14px 0; color: var(--green); font-size: 12px; line-height: 16px; font-weight: 500; text-wrap: pretty; }
+  #sitesStatus:empty { display: none; }
+  #sitesList { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 16px; }
+  .choice > .pair { display: flex; flex-wrap: wrap; gap: 8px; margin-right: 0; }
+  #importRow { align-items: start; }
+  .plan { grid-column: 2; display: grid; gap: 10px; min-width: 0; }
+  .plan ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+  .plan li { display: flex; justify-content: space-between; gap: 12px; }
+  .plan li > span:last-child { color: var(--secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .plan .hint { grid-column: auto; }
+  .check { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: start; }
+  .check input { width: auto; min-height: 0; margin: 2px 0 0; }
+  .check .hint { grid-column: 2; }
+  .plan .buttons { display: flex; justify-content: flex-end; gap: 8px; }
   #status { margin-right: auto; color: var(--secondary); }
   #status[data-kind=ok] { color: var(--green); }
   @media (max-width: 520px) {
     .row { grid-template-columns: 1fr; }
-    .row .wide, .hint { grid-column: 1; }
+    .row .wide, .hint, .plan { grid-column: 1; }
   }
 </style></head>
 <body>
@@ -55,7 +75,7 @@
     <div class="row">
       <span>Save To</span>
       <div class="choice">
-        <span id="destName"></span>
+        <span class="folder"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.75 4.25a1 1 0 0 1 1-1h3.5l1.5 1.5h5.5a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H2.75a1 1 0 0 1-1-1Z"/></svg><span id="destName"></span></span>
         <button class="secondary" id="useDownloads" type="button">Use Downloads</button>
         <button class="secondary" id="chooseDest" type="button">Choose Folder…</button>
       </div>
@@ -67,7 +87,7 @@
         <span id="inboxState"></span>
         <button class="secondary" id="allowInbox" type="button"></button>
       </div>
-      <p class="hint">Some sites can only save to Downloads, so their files pass through a folder there on the way to yours. Statement Sweep has already made it. Choose “Statement Sweep Inbox” in Downloads when asked.</p>
+      <p class="hint" id="inboxhint"></p>
     </div>
     <div class="row">
       <label for="base">Main Folder</label>
@@ -127,6 +147,63 @@
     </dl>
   </details>
 
+  <h2>Sites</h2>
+  <div class="group">
+    <div class="row">
+      <span id="sitesLabel">Include in Sweeps</span>
+      <div class="plan" id="sitesList" role="group" aria-labelledby="sitesLabel"></div>
+      <p class="hint">A site switched off here is left out of every sweep and the toolbar count. Each time you open Statement Sweep, the sites that need updating are ticked for you; untick any you want to skip that time.</p>
+    </div>
+    <div class="row">
+      <span>Dismissed Gaps</span>
+      <div class="choice">
+        <span id="gapsCount"></span>
+        <button class="secondary" id="gapsReset" type="button">Show Them Again</button>
+      </div>
+      <p class="hint">A possible gap you dismissed in the popup is not flagged again. A gap somewhere new still is.</p>
+    </div>
+  </div>
+  <p id="sitesStatus" role="status"></p>
+
+  <h2>History</h2>
+  <div class="group">
+    <div class="row">
+      <span>Already Saved</span>
+      <div class="choice">
+        <span id="historyCount"></span>
+        <span class="pair"><button class="secondary" id="exportHistory" type="button">Export History…</button><button class="secondary" id="importHistory" type="button">Import History…</button></span>
+        <input id="historyFile" type="file" accept=".json,application/json" hidden aria-label="History file">
+      </div>
+      <p class="hint">Statement Sweep remembers which documents it has saved, so it never saves one twice. Move that record to another copy of Statement Sweep, such as the one from the Chrome Web Store. Your chosen folder does not come along; choose it again there.</p>
+    </div>
+    <div class="row">
+      <span>Run Logs</span>
+      <div class="choice">
+        <span id="logsCount"></span>
+        <button class="secondary" id="exportLogs" type="button">Export Logs…</button>
+      </div>
+      <p class="hint">What each site did in a sweep, and why it stopped, for fixing a site that does not save. With a folder chosen, each run's log is in a Logs folder beside each site's documents. Without one, the latest lines are kept in Chrome, and Export Logs saves them as one text file. Logs never leave your computer, and long numbers in them show only their last 4 digits.</p>
+    </div>
+    <div class="row" id="importRow" hidden>
+      <span id="importHead">From the File</span>
+      <div class="plan">
+        <ul id="importPlan" aria-labelledby="importHead"></ul>
+        <p class="hint" id="importNote"></p>
+        <div class="check" id="importSettingsRow">
+          <input id="importSettings" type="checkbox">
+          <label for="importSettings">Also use the file's folder and file name settings</label>
+          <p class="hint" id="importSettingsHint"></p>
+        </div>
+        <div class="buttons">
+          <button class="secondary" id="importCancel" type="button">Cancel</button>
+          <button class="primary" id="importConfirm" type="button">Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p id="historyProblem" role="alert"></p>
+  <p id="historyStatus" role="status"></p>
+
   <div class="actions">
     <span id="status" role="status"></span>
     <button class="secondary" id="reset" type="button">Restore Defaults</button>
@@ -134,4 +211,5 @@
   </div>
 </main>
 <script src="options.js" type="module"></script>
+<script src="sites-settings.js" type="module"></script>
 </body></html>
