@@ -16,6 +16,16 @@ for m in metas:
     for h in m.get("fileHosts", []):
         assert re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", h), (m["id"], h)
         hosts.add(f"https://{h}/*")
+    # Card offers (offers.js): an offers recipe, which kind of card it is for,
+    # and an offers page on the site's own exact hosts. A site whose sign-in
+    # it shares with another (Chase and Chase Business) must say which kind.
+    o = m.get("offers")
+    if o is not None:
+        assert isinstance(o, dict) and set(o) <= {"file", "url", "cards"}, (m["id"], "offers keys", o)
+        assert re.fullmatch(r"providers/[a-z0-9]+\.offers\.js", o.get("file", "")) and (ROOT / o["file"]).is_file(), (m["id"], o)
+        assert o.get("cards", "") in ("", "personal", "business"), (m["id"], "offers cards", o.get("cards"))
+        if "url" in o:
+            assert any(o["url"].startswith(h[:-1]) for h in m["match"] if "*." not in h), (m["id"], o["url"])
     # A file the engine puts in the page's own world before a save (world MAIN).
     if "mainFile" in m:
         assert re.fullmatch(r"providers/[a-z0-9]+\.main\.js", m["mainFile"]) and (ROOT / m["mainFile"]).is_file(), (m["id"], m["mainFile"])
@@ -26,6 +36,16 @@ for m in metas:
         assert isinstance(steps, list) and 1 <= len(steps) <= 3, (m["id"], "guide", kind, "1 to 3 steps")
         for s in steps:
             assert isinstance(s, str) and s.strip() and len(s) <= 80 and "<" not in s, (m["id"], "guide", kind, s)
+# Sites that share one sign-in and one offers recipe must each say which kind
+# of card is theirs, and no two the same kind, so a card is never added to twice.
+shared = {}
+for m in metas:
+    if m.get("offers"):
+        shared.setdefault(m["offers"]["file"], []).append(m)
+for file, ms in shared.items():
+    if len(ms) > 1:
+        kinds = [m["offers"].get("cards", "") for m in ms]
+        assert all(kinds) and len(set(kinds)) == len(kinds), (file, "offers cards must differ", kinds)
 (ROOT / "providers" / "index.js").write_text(
     "// Made by tools/build.py from providers/*.meta.json. Change those.\n"
     "export const PROVIDERS = " + json.dumps(metas, indent=2) + ";\n")

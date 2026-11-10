@@ -8,5 +8,10 @@
   "pageFile": "providers/chasebusiness.page.js",
   "fileName": "{date} Chase {title} Statement.pdf",
   "family": "click",
+  "offers": {
+    "file": "providers/chase.offers.js",
+    "url": "https://secure.chase.com/web/auth/dashboard#/dashboard/merchantOffers/offer-hub",
+    "cards": "business"
+  },
   "downloadWaitSeconds": 60
 }

@@ -46,6 +46,9 @@
   #historyProblem { margin: 6px 14px 0; color: var(--red); font-size: 12px; line-height: 16px; font-weight: 500; text-wrap: pretty; }
   #historyStatus, #sitesStatus { margin: 6px 14px 0; color: var(--green); font-size: 12px; line-height: 16px; font-weight: 500; text-wrap: pretty; }
   #sitesStatus:empty { display: none; }
+  #offersStatus { margin: 6px 14px 0; color: var(--green); font-size: 12px; line-height: 16px; font-weight: 500; text-wrap: pretty; }
+  #offersStatus:empty { display: none; }
+  #offersSites { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 16px; }
   #sitesList { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 16px; }
   .choice > .pair { display: flex; flex-wrap: wrap; gap: 8px; margin-right: 0; }
   #importRow { align-items: start; }
@@ -165,6 +168,17 @@
   </div>
   <p id="sitesStatus" role="status"></p>
 
+  <h2 id="offersHead">Card Offers</h2>
+  <div class="group" id="offersGroup">
+    <div class="row">
+      <span id="offersLabel">Add When Syncing</span>
+      <div class="plan" id="offersSites" role="group" aria-labelledby="offersLabel"></div>
+      <p class="hint">Off unless you turn it on for a site. After that site's statements are saved, Statement Sweep opens its card offers in the same tab and presses each offer's own add control, nothing else. It never buys, applies, enrolls or accepts terms, and an offer it has added is never pressed again. For Chase, personal cards and business cards are kept apart.</p>
+      <p class="hint" id="offersPace"></p>
+    </div>
+  </div>
+  <p id="offersStatus" role="status"></p>
+
   <h2>History</h2>
   <div class="group">
     <div class="row">
@@ -212,4 +226,5 @@
 </main>
 <script src="options.js" type="module"></script>
 <script src="sites-settings.js" type="module"></script>
+<script src="offers-settings.js" type="module"></script>
 </body></html>

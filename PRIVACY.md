@@ -1,6 +1,6 @@
 # Statement Sweep Privacy Policy
 
-Effective November 9, 2026.
+Effective November 10, 2026.
 
 Statement Sweep saves your own statements from sites you sign in to, using
 your own browser. **It sends nothing to its developer or to anyone else.** There
@@ -20,6 +20,16 @@ While a site waits for you to sign in or finish a step, a small Statement Sweep
 card is drawn in that site's tab saying what to do; it reads nothing from the
 page and fills nothing in.
 
+**Card offers, only if you turn them on.** In Settings you can turn on adding
+card offers, one site at a time (American Express, Chase and Chase Business).
+Each is off unless you turn it on. Then, after that site's statements are
+saved, the sweep opens the site's own offers page in the same tab and presses
+each offer's own add control, as you would. It never presses anything that
+buys, applies, enrolls you in a product, upgrades or accepts terms. It adds at
+most 25 offers a site each sync, a few seconds apart, and stops at once if the
+site signs you out or asks you to confirm something. Chase personal cards and
+Chase business cards are kept apart: each is added to only by its own site.
+
 ## What it keeps, on your computer only
 
 - The documents it saves, in your Downloads folder or a folder you choose.
@@ -31,7 +41,13 @@ page and fills nothing in.
   starts, it works this out again from what is stored and shows the number of
   sites due on its toolbar button. That check reads only the stored dates: it
   opens no site and sends nothing.
-- Your choices: which sites are ticked, and your folder and file name patterns.
+- If you turn on card offers: which offers it has added, which the site
+  already showed as added, and which it left for you, each as a short
+  identifier made from the card's last 4 digits and the offer's words, so it
+  does not press them again. The offers' names are read in the page and not
+  kept.
+- Your choices: which sites are ticked, which sites have card offers turned
+  on, and your folder and file name patterns.
 - The latest status of each site, and how long each step took, until you close
   your browser.
 - A log of each sweep: what each site did and why it stopped, so a site that

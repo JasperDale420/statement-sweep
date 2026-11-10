@@ -109,6 +109,17 @@ def test_a_stop_is_counted_with_what_it_saved(tab):
     assert tab.inner_text("#summary") == "5 new, 1 stopped"
 
 
+def test_offers_added_are_said_on_the_sites_line_and_never_stop_it(tab):
+    # Invented counts. A stopped offers pass is a note on a line that is done.
+    show(tab, {"amex": st("ok", "2 new. Added 3 offers · 4 already on your cards."),
+               "chase": st("ok", "Nothing new. Offers stopped: Chase signed you out.")})
+    assert tab.inner_text("#summary") == "2 new documents"
+    assert tab.get_attribute("#summary", "data-kind") == ""
+    lines = tab.locator("section[data-state=ok] .say").all_inner_texts()
+    assert "2 new. Added 3 offers · 4 already on your cards." in [l.strip() for l in lines]
+    assert tab.locator("section[data-state=bad]").count() == 0
+
+
 def test_every_message_is_shown_whole(tab):
     long = "0 saved. The page was not what this expected. " * 4
     show(tab, {"amex": st("bad", long)})

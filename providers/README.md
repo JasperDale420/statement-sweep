@@ -14,6 +14,7 @@ Each provider is two files. `tools/build.py` makes the rest.
 | `family` | `fetch`, `click` or `print`, how its documents are usually saved |
 | `downloadWaitSeconds` | optional, for `click` and `newtab`: how long a site may take to start a download or open its tab; 45 if unset |
 | `fileHosts` | optional, for `newtab`: exact hosts outside `match` a press may open its PDF on, such as `mountain-storage.s3.amazonaws.com`; fetched only from there, without cookies |
+| `offers` | optional: `{file: "providers/<id>.offers.js", url?, cards?: "personal" \| "business"}`, the site's card offers (offers.js). `url` must be on the site's own hosts; `cards` is required when two sites share one offers file (Chase and Chase Business) |
 | `guide` | optional: `{signIn?, waiting?, challenge?}`, each 1 to 3 short steps (under about 70 characters, plain words) for the card drawn in the site's tab while it waits for the person (guide.js): `signIn` for `signed_out` and an off-host sign-in, `waiting` for `waiting`, `challenge` for `challenge`. Without one the card says a general line, or the recipe's own `why` for `waiting`. A `stopped` answer is not a wait and gets no card |
 
 `providers/shared.js` is loaded first, and gives `__sweepPdf.pdfResult(bytes)` and `__sweepLog(text)` (see Logs).
@@ -37,9 +38,21 @@ extension's isolated world, and sets `globalThis.__sweep`:
 A `click` doc may carry `nameMustMatch`, a regular expression the site's own file name must match.
 A provider that cannot save anything yet is kept with `"enabled": false`, and gets no access to its site.
 
+## Card offers
+
+An offers file runs after the site's statements, in the same tab, and sets
+`globalThis.__offers = {readOffers({walk, cards}), addOne(offer), nextCard?()}`.
+The full contract is at the top of `offers.js`; `providers/offers-kit.js`
+holds what every offers file shares, including the words never pressed. The
+engine presses at most `MAX_PRESSES` a site each sync, `PACE_MS` apart, and
+stops at the first `signed_out` or `challenge`.
+
 ## Rules
 
 - Read and download only. Never submit a form, change a setting, or move money.
+  The one exception is an offers file, run only when the person turned offers
+  on for that site in Settings: it may press each offer's own add control, and
+  nothing else.
 - Press only a document's own download or view control.
 - Never type a password, answer a check, or work around a sign-in or CAPTCHA.
   Answer `signed_out` or `challenge` and wait for the person.

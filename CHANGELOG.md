@@ -5,6 +5,8 @@ What changed for people using Statement Sweep, newest first. The version is
 
 ## Unreleased
 
+- Card offers for American Express, Chase and Chase Business, off until
+  turned on per site in Settings.
 - New-tab and print-to-PDF saving, per-site run logs, and an on-screen guide
   for sites that need you first.
 - TreasuryDirect, Interactive Brokers and Apple Card carry on in the tab you
