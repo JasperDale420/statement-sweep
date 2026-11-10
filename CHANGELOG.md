@@ -5,6 +5,8 @@ What changed for people using Statement Sweep, newest first. The version is
 
 ## Unreleased
 
+## 0.4.0 · 2026-11-10
+
 - Add This Site: teach Statement Sweep a site that is not built in, on its
   own statements page, by clicking one statement link. It finds the others
   like it, reads their dates, and the site then syncs with the rest. Chrome

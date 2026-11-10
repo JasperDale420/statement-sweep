@@ -56,4 +56,4 @@ https://github.com/JasperDale420/statement-sweep/blob/main/PRIVACY.md
 **Support URL:**
 https://github.com/JasperDale420/statement-sweep/issues
 
-**Store images:** `store/screenshot-1.png`, `store/screenshot-2.png` (1280 x 800). The icon is taken from the package.
+**Store images:** `store/screenshot-1.png`, `store/screenshot-2.png`, `store/screenshot-3.png` (1280 x 800), made with invented data. The icon is taken from the package.
