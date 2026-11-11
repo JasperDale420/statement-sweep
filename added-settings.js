@@ -34,6 +34,13 @@ function pickAgain(config) {
     const tab = await chrome.tabs.create({ url: config.listUrl, active: true });
     const ready = await loadedTab(tab.id);
     if (!ready) return;
+    // Drawn only on the site itself: its page may have sent the tab elsewhere.
+    let now = null;
+    try { now = new URL(ready.url).origin; } catch (e) { /* no address to read */ }
+    if (now !== config.origin) {
+      status.textContent = `The picker wasn't drawn: the new tab left ${host}. Open its statements page and press Add This Site in Statement Sweep's menu.`;
+      return;
+    }
     try {
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["providers/added.page.js", "picker.js"] });
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: (o) => globalThis.__sweepPicker.start(o), args: [{ name: config.name }] });

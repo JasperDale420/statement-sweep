@@ -32,9 +32,16 @@ const looked = (async () => {
   }
 })();
 
-async function draw(tabId, name) {
+// Draws the picker, but only while the tab is still on the site you said OK
+// to: it may have gone elsewhere while Chrome asked. False when it has.
+async function draw(tabId, name, origin) {
+  const tab = await chrome.tabs.get(tabId);
+  let now = null;
+  try { now = new URL(tab.url).origin; } catch (e) { /* no address to read */ }
+  if (now !== origin) return false;
   await chrome.scripting.executeScript({ target: { tabId }, files: ["providers/added.page.js", "picker.js"] });
   await chrome.scripting.executeScript({ target: { tabId }, func: (o) => globalThis.__sweepPicker.start(o), args: [{ name }] });
+  return true;
 }
 
 link.addEventListener("click", (event) => {
@@ -51,7 +58,7 @@ link.addEventListener("click", (event) => {
   chrome.permissions.request({ origins: [`${origin}/*`] }).then(async (granted) => {
     if (!granted) { say(`Statement Sweep needs your OK to read ${host}. Nothing was added.`); return; }
     try {
-      await draw(tabId, name);
+      if (!(await draw(tabId, name, origin))) { say(`This tab is no longer on ${host}. Open its statements page and press Add This Site again.`); return; }
       window.close();
     } catch (e) {
       say("Statement Sweep can't draw on this page. Reload it and press Add This Site again.");

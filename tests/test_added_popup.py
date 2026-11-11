@@ -25,7 +25,8 @@ window.close = () => { __closed = true; };
 Object.defineProperty(window, 'chrome', {value: {
   storage: {session: area('__session'), local: area('__local')},
   runtime: {sendMessage: async (m) => { __sent.push(m); }, openOptionsPage: () => {}, onMessage: {addListener: () => {}}, getURL: (p) => 'chrome-extension://sweep' + p},
-  tabs: {query: async () => [saved.tab], update: async () => ({}), },
+  // The tab as it is when the picker is drawn: where it went since the popup opened, if anywhere.
+  tabs: {query: async () => [saved.tab], get: async (id) => ({...saved.tab, url: saved.now || saved.tab.url}), update: async () => ({}), },
   windows: {update: async () => ({})},
   permissions: {request: async (o) => { __calls.push(['request', o, __pressing]); return !saved.deny; }},
   scripting: {executeScript: async (o) => { __calls.push(['script', o.target.tabId, o.files || o.args]); return [{result: 'shown'}]; }},
@@ -54,9 +55,9 @@ def tab():
         b.close()
 
 
-def show(tab, url, local=None, deny=False):
+def show(tab, url, local=None, deny=False, now=None):
     tab.goto(BASE)
-    tab.evaluate("s => sessionStorage.setItem('state', JSON.stringify(s))", {"tab": {"id": 41, "url": url}, "local": local or {}, "deny": deny})
+    tab.evaluate("s => sessionStorage.setItem('state', JSON.stringify(s))", {"tab": {"id": 41, "url": url}, "local": local or {}, "deny": deny, "now": now})
     tab.goto(BASE + "popup.html")
     tab.wait_for_selector("#scroll li")
     # The tab is looked at as the popup opens.
@@ -98,6 +99,15 @@ def test_on_another_site_it_asks_chrome_inside_the_press_then_draws_the_picker(t
         ["script", 41, ["providers/added.page.js", "picker.js"]],
         ["script", 41, [{"name": ""}]],
     ]
+
+
+@pytest.mark.parametrize("now", ["https://elsewhere.example.test/statements", "https://bank.example.test.elsewhere.test/", "chrome://newtab/"])
+def test_a_tab_that_left_the_site_while_chrome_asked_gets_no_picker(tab, now):
+    show(tab, "https://bank.example.test/statements", now=now)
+    add(tab)
+    tab.wait_for_function("document.getElementById('addSay').textContent !== ''")
+    assert tab.inner_text("#addSay") == "This tab is no longer on bank.example.test. Open its statements page and press Add This Site again."
+    assert [c[0] for c in tab.evaluate("__calls")] == ["request"] and not tab.evaluate("__closed")
 
 
 def test_without_chromes_ok_nothing_is_drawn(tab):
