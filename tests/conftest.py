@@ -9,7 +9,12 @@ _launch = BrowserType.launch
 
 
 def _offline_launch(self, *a, args=None, **kw):
-    return _launch(self, *a, args=[*(args or []), OFFLINE], **kw)
+    # Chrome takes the last copy of a switch, so a test that maps hosts itself
+    # (to a local server it runs, all of them) keeps its own rules.
+    args = list(args or [])
+    if not any(str(x).startswith("--host-resolver-rules") for x in args):
+        args.append(OFFLINE)
+    return _launch(self, *a, args=args, **kw)
 
 
 BrowserType.launch = _offline_launch
