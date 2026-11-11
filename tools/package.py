@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Make the Chrome Web Store upload: only what the extension runs, and only the
-recipes of the providers that are switched on."""
-import json, pathlib, zipfile
+recipes of the providers that are switched on. It refuses to run while a
+packaged file differs from what is committed, or while providers/index.js or
+manifest.json is not what tools/build.py makes, so the upload is always a
+commit anyone can read."""
+import json, pathlib, shutil, subprocess, sys, tempfile, zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FILES = ["manifest.json", "background.js", "capture.js", "naming.js", "cadence.js", "folders.js", "log.js", "guide.js", "options.html", "options.js", "sites-settings.js", "history.js", "popup.html", "popup.js", "ui.css",
@@ -17,6 +20,23 @@ icons = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "icons").glob("*.
 # Chase and Chase Business share one offers file, which is zipped once.
 offers = sorted({m["offers"]["file"] for m in metas if m.get("offers")})
 names = FILES + icons + [m["pageFile"] for m in metas] + [m["mainFile"] for m in metas if m.get("mainFile")] + offers
+
+changed = subprocess.run(["git", "status", "--porcelain", "--", *names], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+if changed:
+    sys.exit("Not packaged: these files differ from what is committed. Commit them first.\n" + changed)
+# Build in a copy, so a stale site list is said, not quietly fixed here.
+with tempfile.TemporaryDirectory() as tmp:
+    copy = pathlib.Path(tmp)
+    shutil.copytree(ROOT / "providers", copy / "providers")
+    (copy / "tools").mkdir()
+    shutil.copy2(ROOT / "tools" / "build.py", copy / "tools" / "build.py")
+    shutil.copy2(ROOT / "manifest.json", copy / "manifest.json")
+    built = subprocess.run([sys.executable, "tools/build.py"], cwd=copy, capture_output=True, text=True)
+    if built.returncode:
+        sys.exit("Not packaged: tools/build.py failed.\n" + built.stderr)
+    stale = [n for n in ("providers/index.js", "manifest.json") if (copy / n).read_bytes() != (ROOT / n).read_bytes()]
+if stale:
+    sys.exit(f"Not packaged: {' and '.join(stale)} out of date. Run python3 tools/build.py and commit the result.")
 
 out = ROOT / "dist" / f"statement-sweep-{manifest['version']}.zip"
 out.parent.mkdir(exist_ok=True)
