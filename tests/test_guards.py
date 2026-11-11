@@ -57,6 +57,20 @@ def own_host(meta, host):
         or host in meta.get("fileHosts", [])
 
 
+# Sites whose list address is a sign-in on another host (TriNet W-2 starts at
+# TriNet's own sign-in link): the page on their own host the sign-in lands on.
+SIGNED_IN_PAGE = {"trinetw2": "https://www.paperlessemployee.com/trinettaxforms/PE/TaxStatements"}
+
+
+def stand_in_url(meta):
+    """The stand-in's address: the site's list address, or where its sign-in lands."""
+    url = meta["listUrl"]
+    if own_host(meta, urlsplit(url).hostname):
+        return url
+    assert meta["id"] in SIGNED_IN_PAGE, f"{meta['id']}: its list address is on another host; say where its sign-in lands"
+    return SIGNED_IN_PAGE[meta["id"]]
+
+
 DOCS = [
     {"id": "guard:2026-10-01", "date": "2026-10-01", "title": "Statement", "method": m, "url": "/danger/doc"}
     for m in ("click", "fetch", "newtab", "print")
@@ -85,7 +99,8 @@ def test_no_recipe_presses_a_control_it_must_not(browser, meta):
         else:
             r.fulfill(status=200, content_type="text/html; charset=utf-8", body=controls())
     page.route("**/*", route)
-    page.goto(meta["listUrl"])
+    page.goto(stand_in_url(meta))
+    asked.clear()
     scripts = [ROOT / "providers" / "shared.js", ROOT / meta["pageFile"]]
     for s in scripts:
         page.add_script_tag(content=s.read_text())

@@ -109,7 +109,7 @@ def test_a_stored_value_that_is_not_a_date_is_ignored(tab):
 
 @pytest.mark.parametrize("title,tax", [
     ("1099-B Tax Form", True), ("Consolidated 1099", True), ("Form 1098-E", True), ("5498 Tax Form", True),
-    ("1099-INT", True), ("Realized Gains Tax Document", True), ("Account Transcript", True), ("Gain/Loss Report", True),
+    ("W-2", True), ("W-2 1", True), ("W-2c", True), ("W2", True), ("Form W-2 2025", True), ("1099-INT", True), ("Realized Gains Tax Document", True), ("Account Transcript", True), ("Gain/Loss Report", True),
     ("Monthly Statement", False), ("Property Tax Notice", False), ("Utility Bill", False), ("Tax Bill 2025", False),
 ])
 def test_tax_forms_are_known_by_their_title(tab, title, tax):

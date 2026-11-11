@@ -95,7 +95,8 @@ export function seriesOf(id) {
 // PaperPull's doc_types: a document is a tax document when its title names a
 // tax form. Property tax bills and notices are bills, not forms that arrive
 // in tax season, so they are left out.
-const TAX = /\b(1099|1098|1042|5498|w-?2|tax|transcript|gain\s*loss|realized\s+gains?)\b/i;
+// Hyphens are spaces by the time this looks (isTaxText), so a W-2 reads "W 2".
+const TAX = /\b(1099|1098|1042|5498|w\s?-?2c?|tax|transcript|gain\s*loss|realized\s+gains?)\b/i;
 const NOT_TAX = /\bproperty\s+tax\b|\btax\s+(bill|notice|receipt|payment)s?\b/i;
 export function isTaxText(text) {
   const t = String(text || "").replace(/[_\-:|/.,]+/g, " ").replace(/(\d)([a-z])/gi, "$1 $2");
