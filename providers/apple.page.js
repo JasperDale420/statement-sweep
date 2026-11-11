@@ -250,7 +250,8 @@
     const walk = loadWalk() || { visited: [] };
     const [next] = pending(list, walk);
     if (!next) { dropWalk(); trace(`End of the walk: ${walk.visited.length} order(s) visited.`); return { moved: false }; }
-    trace(`Next: the details of order ${next.number}.`);
+    // Its place in the walk, never its number, which is the order's own.
+    trace(`Next: the details of order ${walk.visited.length + 1} of this walk.`);
     saveWalk({ visited: [...walk.visited, next.number], t: Date.now() });
     // One details page at a time, the way a person reads them.
     leaveFor(next.detail, PAUSE_MS);

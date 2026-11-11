@@ -117,6 +117,8 @@ export function makeCapture({ inPage, loaded, tabChange, onHost, isOurs, log = (
   const URL_WAIT_MS = waits.url ?? 20000;
   const READY_WAIT_MS = waits.ready ?? 60000;
   const SETTLE_MS = waits.settle ?? 500;
+  // A print that never ends would hold the run, and the debugger on the tab.
+  const PRINT_WAIT_MS = waits.print ?? 2 * 60 * 1000;
   // Tabs opened by a press, never a site's own tab (see tabToUse).
   const opened = new Set();
 
@@ -270,13 +272,25 @@ export function makeCapture({ inPage, loaded, tabChange, onHost, isOurs, log = (
         return { ok: false, why: `Chrome would not let ${provider.name}'s page be printed.` };
       }
       let printed = null;
+      let timer;
+      const late = new Promise((resolve) => { timer = setTimeout(() => resolve("late"), PRINT_WAIT_MS); });
       try {
-        printed = await chrome.debugger.sendCommand(target, "Page.printToPDF", { ...PRINT_OPTIONS, landscape: Boolean(doc.printLandscape) });
-      } catch (e) { log(provider, `Page.printToPDF failed: ${(e && e.message) || e}`, "WARN"); }
+        const command = chrome.debugger.sendCommand(target, "Page.printToPDF", { ...PRINT_OPTIONS, landscape: Boolean(doc.printLandscape) });
+        printed = await Promise.race([command, late]);
+      } catch (e) { log(provider, `Page.printToPDF failed: ${(e && e.message) || e}`, "WARN"); } finally { clearTimeout(timer); }
+      // The debugger is detached below, as after any print.
+      if (printed === "late") {
+        log(provider, `Page.printToPDF did not answer within ${Math.round(PRINT_WAIT_MS / 1000)} s.`, "WARN");
+        return { ok: false, why: "Chrome's print did not finish in time." };
+      }
       if (detached) log(provider, `Debugger detached from tab ${tabId}: ${detached}${detached === "canceled_by_user" ? " (you pressed Cancel on Chrome's bar)" : ""}.`, "WARN");
       if (detached === "canceled_by_user") return { ok: false, stop: true, why: canceled(provider) };
       if (detached === "target_closed") return { ok: false, stop: true, why: `${provider.name}'s tab was closed.` };
       if (detached) return { ok: false, why: "Chrome stopped the print before it finished." };
+      // Asked again after printing: a page that moved off the site while it
+      // was printed may have been something else.
+      const after = await chrome.tabs.get(tabId).catch(() => null);
+      if (!after || !onHost(after.url, provider)) return { ok: false, why: `The tab left ${provider.name} while it was printed.` };
       const data = printed && printed.data;
       // "JVBERi0" is "%PDF-" in base64.
       if (!data || !data.startsWith("JVBERi0")) return { ok: false, why: "Chrome's print did not make a PDF." };

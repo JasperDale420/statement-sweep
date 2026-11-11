@@ -4,7 +4,7 @@
 // Every site, built in or added with Add This Site (sites.js). A live list:
 // loadSites() is called at the start of each piece of work to bring in the
 // sites added since.
-import { SITES as PROVIDERS, ADDED, cleanConfig, lastKey, loadSites, primedKey, withSite } from "./sites.js";
+import { SITES as PROVIDERS, ADDED, builtInFor, cleanConfig, lastKey, loadSites, primedKey, withSite } from "./sites.js";
 import { pathFor } from "./naming.js";
 import { makeCapture } from "./capture.js";
 import { INBOX, getFolder, isGranted, moveFromInbox, withinChosen, writeFile } from "./folders.js";
@@ -26,6 +26,11 @@ const SIGN_IN_WAIT_MS = 5 * 60 * 1000;
 // one, when you choose, so each site waits much longer for you.
 const SIGN_IN_WAIT_TOGETHER_MS = 30 * 60 * 1000;
 const MAX_VIEWS = 300;
+// A list is the site's own word, and what it lists is kept in
+// chrome.storage.local, so a page cannot fill it: ids past this length are
+// left unread, and one list or view gives at most this many documents.
+const MAX_ID_LENGTH = 300;
+const MAX_DOCS_PER_LIST = 5000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const human = () => sleep(1500 + Math.random() * 1500);
 
@@ -38,6 +43,30 @@ let runAt = 0;
 let stopAsked = false;
 const progressFor = new Map();
 const STOPPED = "You stopped the sync. The rest wait for next time.";
+
+// A step in a page that never answers, or a save that never ends, would hold
+// the run, and its clean-up after, for ever. Each is given a time: a call in
+// the page two minutes, a save five, or longer for a download Chrome may be
+// holding (HELD_WAIT_MS). The step itself cannot be called back; what it
+// does after its time is ignored. Stop cuts short a wait that saves nothing
+// (`stoppable`), as it does a sign-in wait; a save under way is let finish.
+const PAGE_WAIT_MS = 2 * 60 * 1000;
+const SAVE_WAIT_MS = 5 * 60 * 1000;
+const stopWakes = new Set();
+function within(ms, why, work, stoppable = false) {
+  if (stoppable && stopAsked) return Promise.reject(new Error(STOPPED));
+  let timer, wake;
+  const limit = new Promise((resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(why)), ms);
+    wake = () => reject(new Error(STOPPED));
+    if (stoppable) stopWakes.add(wake);
+  });
+  return Promise.race([work(), limit]).finally(() => {
+    clearTimeout(timer);
+    stopWakes.delete(wake);
+  });
+}
+const minutes = (ms) => `${amount(ms / 60000)} minute${ms === 60000 ? "" : "s"}`;
 // The tab each site is sweeping in, so its line on the board can say which
 // tab to show you.
 const tabFor = new Map();
@@ -152,13 +181,19 @@ async function say(id, state, text, offers) {
 
 // A recipe's own lines for the log (shared.js __sweepLog) come back on its
 // answer as `log`, and are written to the site's log here.
+// Each call has PAGE_WAIT_MS (see within). A read of the list, or a move to
+// the next view, saves nothing, so Stop cuts it short; a press for a
+// document is let answer.
 async function inPage(tabId, provider, func, args = []) {
   let result;
+  const stoppable = func === readList || func === nextView;
   try {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ["providers/shared.js", provider.pageFile] });
-    // An added site's recipe reads its saved pattern from here (added.page.js).
-    if (provider.added) await chrome.scripting.executeScript({ target: { tabId }, func: (config) => { globalThis.__sweepAddedConfig = config; }, args: [provider.added] });
-    [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
+    await within(PAGE_WAIT_MS, `The page did not answer within ${minutes(PAGE_WAIT_MS)}.`, async () => {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["providers/shared.js", provider.pageFile] });
+      // An added site's recipe reads its saved pattern from here (added.page.js).
+      if (provider.added) await chrome.scripting.executeScript({ target: { tabId }, func: (config) => { globalThis.__sweepAddedConfig = config; }, args: [provider.added] });
+      [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
+    }, stoppable);
   } catch (e) {
     logs.error(provider, `inPage ${func.name || "script"} in tab ${tabId}`, e);
     throw e;
@@ -597,6 +632,11 @@ async function fetchHere(address, provider) {
   }
 }
 
+// Whether base64 decodes to bytes that start %PDF-.
+function startsPdf(base64) {
+  try { return typeof base64 === "string" && atob(base64.slice(0, 8)).startsWith("%PDF-"); } catch (e) { return false; }
+}
+
 async function saveOne(tabId, provider, doc) {
   const { naming } = await chrome.storage.local.get("naming");
   const filename = pathFor(naming, provider, doc);
@@ -624,6 +664,9 @@ async function saveOne(tabId, provider, doc) {
       pdf = await fetchHere(pdf.fetchUrl, provider);
     }
     if (!pdf.ok) return pdf;
+    // The recipes check the bytes start %PDF-, and so does the engine, so a
+    // sign-in page handed over as a statement is never marked as saved.
+    if (!startsPdf(pdf.base64)) return { ok: false, why: "The site sent something that is not a PDF." };
     const size = Math.floor((pdf.base64.length * 3) / 4) - (pdf.base64.endsWith("==") ? 2 : pdf.base64.endsWith("=") ? 1 : 0);
     if (destination) {
       try {
@@ -660,6 +703,13 @@ async function saveOne(tabId, provider, doc) {
       await moveFromInbox(await getFolder("inbox"), stageName, destination, withinChosen(destination.name, filename));
     } catch (e) {
       logs.error(provider, "moving a download from the inbox", e);
+      // Not a PDF by its bytes: not saved, so it is fetched again next time,
+      // and the staged file is taken out of Downloads.
+      if (/not a PDF/i.test(String((e && e.message) || e))) {
+        await chrome.downloads.removeFile(landed.id).catch(() => {});
+        await chrome.downloads.erase({ id: landed.id }).catch(() => {});
+        return { ok: false, why: "The site sent something that is not a PDF." };
+      }
       return { ok: true, bytes: landed.bytes, note: `Some documents stayed in Downloads, in ${INBOX}, because they could not be moved to your chosen folder.` };
     }
     await chrome.downloads.removeFile(landed.id).catch(() => {});
@@ -806,6 +856,16 @@ async function lastSync(provider, list) {
   } });
 }
 
+// A list's documents within MAX_ID_LENGTH and MAX_DOCS_PER_LIST. One whose
+// id is too long is left unread, as one a recipe could not read is.
+function bounded(provider, docs) {
+  const kept = docs.filter((d) => d && String(d.id).length <= MAX_ID_LENGTH);
+  if (kept.length < docs.length) note(provider, `${docs.length - kept.length} document(s) left unread: an id longer than ${MAX_ID_LENGTH} characters.`, "WARN");
+  if (kept.length <= MAX_DOCS_PER_LIST) return kept;
+  note(provider, `The list held ${amount(kept.length)} documents; only the first ${amount(MAX_DOCS_PER_LIST)} are taken.`, "WARN");
+  return kept.slice(0, MAX_DOCS_PER_LIST);
+}
+
 // `together` is true when every site runs at once (see listOnceSignedIn).
 async function sweep(provider, together = false) {
   const key = `seen:${provider.id}`;
@@ -901,6 +961,7 @@ async function sweep(provider, together = false) {
       if (!ours) tabFor.delete(provider.id);
       return say(provider.id, "bad", `${count ? `${count} saved. ` : ""}Skipped.`);
     }
+    if (Array.isArray(list.docs)) list.docs = bounded(provider, list.docs);
     if (provider.added) await lastSync(provider, list);
     if (priming && list.state === "ok") {
       priming = false;
@@ -940,7 +1001,10 @@ async function sweep(provider, together = false) {
       if (stopAsked) return stopped();
       track();
       await say(provider.id, "working", `Saving ${i + 1} of ${fresh.length}…`);
-      const result = await timed(provider, "save", () => saveOne(tab.id, provider, doc))
+      // A click whose download Chrome may hold waits HELD_WAIT_MS for it
+      // (nextDownload), so its save is given that and a page call's time more.
+      const saveWait = doc.method === "click" && downloadsInTab.get(tab.id) ? HELD_WAIT_MS + PAGE_WAIT_MS : SAVE_WAIT_MS;
+      const result = await timed(provider, "save", () => within(saveWait, `The save did not finish within ${minutes(saveWait)}.`, () => saveOne(tab.id, provider, doc)))
         .catch((e) => {
           logs.error(provider, `saving ${doc.id}`, e);
           return { ok: false, why: `It could not be saved. ${e.message}`, error: e };
@@ -985,6 +1049,7 @@ async function sweep(provider, together = false) {
     try {
       next = await timed(provider, "next", () => inPage(tab.id, provider, nextView));
     } catch (e) {
+      if (stopAsked) return stopped();
       if (!tabGone(e)) throw e;
       if (await recover("moving to the next view", e)) continue;
       return say(provider.id, "bad", tabClosed());
@@ -1216,10 +1281,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // for a sign-in ends, and what was saved stays saved. Card offers already
 // being added finish their own short, capped pass. Heard only from this
 // extension's own pages, as Add Offers Now is.
+// Whether a message came from a page of this extension (the popup, Settings,
+// Card Offers): a site's tab, where the recipes run, has the site's address,
+// and a message with no address is not trusted either.
+function fromOwnPage(sender) {
+  const own = chrome.runtime.getURL ? chrome.runtime.getURL("") : "";
+  return Boolean(sender) && sender.id === chrome.runtime.id && Boolean(own) && String(sender.url || "").startsWith(own);
+}
+
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (!message || message.type !== "stop") return;
-  const own = chrome.runtime.getURL ? chrome.runtime.getURL("") : "";
-  if (!sender || sender.id !== chrome.runtime.id || !own || !String(sender.url || "").startsWith(own)) return;
+  if (!fromOwnPage(sender)) return;
   if (!running || stopAsked) return;
   stopAsked = true;
   logs.runLine("Stop pressed: no site starts or saves another document.");
@@ -1227,10 +1299,15 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     w.skipped = true;
     w.wake();
   }
+  // A read of a list under way ends too (within).
+  for (const wake of [...stopWakes]) wake();
 });
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.type !== "sweep" || running) return;
+// A run, from the popup's Get New Documents or a site's Run. Heard only from
+// this extension's own pages, as Stop is.
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (!message || message.type !== "sweep" || running) return;
+  if (!fromOwnPage(sender)) return;
   running = true;
   runAt = Date.now();
   stopAsked = false;
@@ -1304,6 +1381,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const config = cleanConfig(message.config, origin, localIso());
     if (!sender || sender.id !== chrome.runtime.id || sender.frameId !== 0 || !config || config.origin !== origin) {
       answer({ ok: false, why: "That can only be added from Statement Sweep's own card, on the site itself." });
+      return;
+    }
+    // A built-in site has a recipe of its own, and its record is kept under
+    // its own id: an added pattern for its host would sweep it twice.
+    const builtIn = builtInFor(`${origin}/`);
+    if (builtIn) {
+      answer({ ok: false, why: `${builtIn.name} is already built in to Statement Sweep, so it isn't added again.` });
       return;
     }
     if (!(await allowed({ match: config.match }))) {

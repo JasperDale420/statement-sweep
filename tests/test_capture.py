@@ -24,7 +24,7 @@ window.__fire = {
   target: (d) => targets.set.forEach((f) => f(d)),
 };
 window.__tab = { id: 1, url: "https://x.test/list" };
-window.__print = { data: null, attachError: null, cancel: false };
+window.__print = { data: null, attachError: null, cancel: false, hang: false, moveTo: "" };
 window.__useNav = false;
 const fake = {
   tabs: {
@@ -41,6 +41,8 @@ const fake = {
     sendCommand: async (target, method, params) => {
       __log.push(["command", method, params.printBackground]);
       if (__print.cancel) { __fire.detached(target.tabId, "canceled_by_user"); throw new Error("Detached"); }
+      if (__print.hang) return new Promise(() => {});
+      if (__print.moveTo) __tab.url = __print.moveTo;
       return { data: __print.data };
     },
   },
@@ -58,7 +60,7 @@ SETUP = """async ({ ours }) => {
     tabChange: (tabId, ms) => new Promise((r) => setTimeout(r, 10)),
     onHost,
     isOurs: async (id) => ours,
-    waits: { open: 600, url: 400, ready: 600, settle: 0 },
+    waits: { open: 600, url: 400, ready: 600, settle: 0, print: 300 },
   });
 }"""
 
@@ -244,6 +246,21 @@ def test_a_print_that_is_not_a_pdf_is_refused_and_detached(tab):
     setup(tab, PRINTING)
     tab.evaluate("__print.data = btoa('<html>')")
     assert print_doc(tab) == {"ok": False, "why": "Chrome's print did not make a PDF."}
+    assert ["detach", 1] in log(tab)
+
+
+def test_a_print_that_never_finishes_is_given_up_and_detached(tab):
+    setup(tab, PRINTING)
+    tab.evaluate("__print.hang = true")
+    assert print_doc(tab) == {"ok": False, "why": "Chrome's print did not finish in time."}
+    assert ["detach", 1] in log(tab) and ["leave", "2026-09"] in log(tab)
+
+
+def test_a_tab_that_left_the_site_while_printing_is_refused(tab):
+    setup(tab, PRINTING)
+    tab.evaluate("__print.data = %r; __print.moveTo = 'https://elsewhere.test/'" % base64.b64encode(PDF).decode())
+    got = print_doc(tab)
+    assert got == {"ok": False, "why": "The tab left Example Bank while it was printed."}
     assert ["detach", 1] in log(tab)
 
 
