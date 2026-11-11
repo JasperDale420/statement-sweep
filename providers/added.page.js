@@ -51,8 +51,20 @@
   // -- a link's shape -------------------------------------------------------------
   const words = (el) => String((el && (el.innerText || el.textContent)) || "").replace(/\s+/g, " ").trim();
   // Words on a link that does something other than open a statement.
-  const DANGER = /\bpay\b|payment|transfer|auto-?pay|setting|password|sign\s*(out|off)|log\s*(out|off)|logout|delete|close\s+account|withdraw|\bbuy\b|\bsell\b|\baccept|\bagree|\bremove|enrol|\bapply\b|submit|confirm|cancel|dispute|unsubscribe|paperless|\bedit\b|\bupdate\b/i;
-  const danger = (a) => DANGER.test([words(a), a.getAttribute("aria-label") || "", a.getAttribute("title") || ""].join(" "));
+  // Whole words where a shorter one sits inside a statement's own words: "close"
+  // is refused, "closing date" is not.
+  const DANGER = /\bpay\b|payment|transfer|auto-?pay|setting|password|sign\s*(out|off)|log\s*(out|off)|logout|delete|\bclose\b|withdraw|\bbuy\b|\bsell\b|\baccept|\bagree|\bremove|enrol|\bapply\b|submit|confirm|cancel|dispute|unsubscribe|paperless|\bedit\b|\bupdate\b|\b(re)?orders?\b|\brequest|\bsend\b|\bschedul|\brenew|\breplace|\bredeem|\b(de)?activat|\b(un)?lock\b|\b(un)?freeze\b|\bstop\b|\bupgrade/i;
+  const labels = (a) => [words(a), a.getAttribute("aria-label") || "", a.getAttribute("title") || "",
+    ...[...a.querySelectorAll("img[alt]")].map((img) => img.getAttribute("alt"))].join(" ");
+  const danger = (a) => DANGER.test(labels(a));
+  // Words that say a link opens a statement, in its words or its address. A
+  // pattern saved without the picked link's words (they held a date, or there
+  // were none) takes only links that say this or hold a date, so a link of the
+  // same shape that does something else is not pressed.
+  const STATEMENTISH = /statement|\bstmts?\b|document|\bdocs?\b|pdf|\bview|download|\bbills?\b|billing|invoice|\bfiles?\b|\bopen\b|\btax|1099|\bw-?2\b|notice|letter|receipt/i;
+  const MONTH_WORD = new RegExp(`\\b${MONTH}\\b`, "i");
+  const saysStatement = (a, t) => STATEMENTISH.test(labels(a)) || MONTH_WORD.test(labels(a)) || Boolean(dateIn(labels(a)))
+    || Boolean(t && t.url && STATEMENTISH.test(`${t.url.pathname} ${t.url.search}`));
 
   // One part of an address with what changes from statement to statement taken
   // out: a long id becomes {id}, and each run of digits {n}.
@@ -163,7 +175,7 @@
     if (!a || a.tagName !== "A" || ours(a) || danger(a)) return false;
     const t = target(a);
     if (!t || !t.own || !sameShape(t.shape, cfg.href)) return false;
-    return !cfg.text || words(a).toLowerCase() === cfg.text.toLowerCase();
+    return cfg.text ? words(a).toLowerCase() === cfg.text.toLowerCase() : saysStatement(a, t);
   }
 
   // Every link on the page like the one picked, each with its row.
@@ -274,14 +286,16 @@
     if (!t) return no("That link runs the page's own script, so Statement Sweep can't follow it. Pick a link to one statement.");
     if (!t.own) return no(`That link goes to another site. Pick a statement link on ${location.hostname}.`);
     if (danger(link)) return no("That link looks like it does something, such as paying or changing a setting. Pick a link that opens a statement.");
+    const text = words(link);
+    const keepsText = text && !/\d/.test(text) && text.length <= 40;
+    if (!keepsText && !saysStatement(link, t)) return no("That link doesn't say it opens a statement. Pick a link whose words or address say statement, document, PDF, view or download, or give its date.");
     const row = rowOf(link);
     const path = row === link ? [] : pathFrom(row, link);
-    const text = words(link);
     const draft = {
       row: { tag: row.tagName.toLowerCase(), classes: [] },
       path,
       href: t.shape,
-      text: text && !/\d/.test(text) && text.length <= 40 ? text : "",
+      text: keepsText ? text : "",
     };
     // The row's classes that every row like it shares, at most two.
     let found = likeLinks(draft);
@@ -385,7 +399,12 @@
     const t = link && target(link);
     if (!t || !t.own || t.page || !t.url) return { ok: false, why: "Its link was not on the page." };
     try {
-      const response = await fetch(t.url.href, { credentials: "include" });
+      // Cookies go only to this origin. A link here that redirects to another
+      // site is still followed, so a site's own redirects keep working, but it
+      // reaches the other site without your cookies there, and what comes back
+      // is refused below. Stopping every redirect (redirect: "manual") would
+      // also stop the ones a site makes within itself, which are common.
+      const response = await fetch(t.url.href, { credentials: "same-origin" });
       if (new URL(response.url || t.url.href).origin !== location.origin) return { ok: false, why: "Its link went to another site." };
       if (!response.ok) return { ok: false, why: "The site did not send it." };
       const bytes = new Uint8Array(await response.arrayBuffer());

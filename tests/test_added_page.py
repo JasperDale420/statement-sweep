@@ -6,6 +6,8 @@ whose statement links sit beside pay buttons and links. The picker is run
 with its shadow root kept aside so the test can read its card, and pressed
 with real mouse clicks, as a person would. Every number and name is invented."""
 import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 import pytest
@@ -72,12 +74,51 @@ window.chrome = { runtime: { sendMessage: async (m) => { __sent.push(m); return 
 """
 
 
+# A redirect a route answers is followed past the route, so every host this
+# browser looks up is this one local server: nothing reaches a real site. It
+# serves the redirect test's pages over plain http and records each request.
+MOVES = f"""<!doctype html><title>Moves</title>
+<table><thead><tr><th>Statement Date</th><th>Document</th></tr></thead><tbody>
+<tr><td>Oct 31, 2026</td><td><a href="/move/1/pdf">Download</a></td></tr>
+<tr><td>Sep 30, 2026</td><td><a href="/move/2/pdf">Download</a></td></tr>
+</tbody></table>"""
+
+
+class Local(BaseHTTPRequestHandler):
+    heard = []
+
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        Local.heard.append((self.headers.get("host"), self.path, self.headers.get("cookie")))
+        moves = {"/move/1/pdf": "http://other.example.test/files/1.pdf", "/move/2/pdf": "/files/2.pdf"}
+        if self.path in moves:
+            self.send_response(302)
+            self.send_header("location", moves[self.path])
+            self.send_header("content-length", "0")
+            self.end_headers()
+            return
+        body, kind = (PDF, "application/pdf") if self.path.endswith(".pdf") else (MOVES.encode(), "text/html; charset=utf-8")
+        self.send_response(200)
+        self.send_header("content-type", kind)
+        # The other site even lets the bank's page read it, the worst case.
+        self.send_header("access-control-allow-origin", "http://bank.example.test")
+        self.send_header("access-control-allow-credentials", "true")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
 @pytest.fixture(scope="module")
 def browser():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Local)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
     with sync_playwright() as p:
-        b = p.chromium.launch()
+        b = p.chromium.launch(args=[f"--host-resolver-rules=MAP * 127.0.0.1:{server.server_address[1]}"])
         yield b
         b.close()
+    server.shutdown()
 
 
 @pytest.fixture
@@ -256,6 +297,40 @@ def test_a_button_or_a_pay_link_is_not_taken(site):
     assert site.evaluate("reached") == [] and site.url == ORIGIN + "/loans"
 
 
+@pytest.mark.parametrize("text", ["Order Checks", "Reorder checks", "Request a copy", "Send to a friend", "Schedule a payment",
+                                  "Renew card", "Replace card", "Redeem rewards", "Activate card", "Lock card", "Unfreeze card",
+                                  "Stop a check", "Close", "Cancel", "Dispute this", "Enroll", "Upgrade", "Apply now"])
+def test_a_link_whose_words_do_something_is_refused(site, text):
+    open_page(site, "/files", picker=False)
+    assert site.evaluate("(t) => { const a = document.createElement('a'); a.href = '/files/1.pdf'; a.textContent = t; document.body.append(a); return __sweepAdded.danger(a); }", text)
+
+
+@pytest.mark.parametrize("text", ["Download", "Statement closing date", "Closing Balance", "Closed accounts", "October 2026 Statement", "View PDF"])
+def test_a_statements_own_words_are_not_refused(site, text):
+    open_page(site, "/files", picker=False)
+    assert not site.evaluate("(t) => { const a = document.createElement('a'); a.href = '/files/1.pdf'; a.textContent = t; document.body.append(a); return __sweepAdded.danger(a); }", text)
+
+
+def test_a_link_that_neither_says_statement_nor_gives_a_date_is_not_taken(site):
+    PAGES["/mixed"] = f"""<!doctype html><title>Mixed</title><ul class="items">
+<li><a href="/item/3001">October 2026</a></li><li><a href="/item/3002">September 2026</a></li><li><a href="/item/3003">Gift 3003</a></li>
+</ul>{SPY}"""
+    try:
+        open_page(site, "/mixed")
+        pick(site, ".items li:last-child a")
+        assert "That link doesn't say it opens a statement." in card(site)
+        pick(site, ".items li:first-child a")
+        assert "2 Statements Found" in card(site)
+        # Its words hold a date, so they are not kept: the recipe still passes the gift by.
+        open_page(site, "/mixed", picker=False)
+        config = learned(site, ".items li:first-child a")
+        assert config["text"] == ""
+        configure(site, config, listPath="/mixed")
+        assert [d["date"] for d in site.evaluate("__sweep.readList({walk: true})")["docs"]] == ["2026-10-31", "2026-09-30"]
+    finally:
+        del PAGES["/mixed"]
+
+
 def test_a_link_to_another_site_is_not_taken(site):
     open_page(site, "/statements")
     site.evaluate("() => document.querySelector('nav a').setAttribute('href', 'https://other.example.test/x')")
@@ -335,6 +410,28 @@ def test_the_recipe_fetches_only_the_matching_pdf(site):
     assert got["ok"] and got["size"] == len(PDF)
     assert [urlsplit(u).path for u in site.asked] == ["/statements/99990002/pdf"]
     assert site.evaluate("__sweep.fetchPdf({id: 'guard:2026-10-01'})") == {"ok": False, "why": "Its link was not on the page."}
+
+
+def test_a_redirect_to_another_site_never_carries_its_cookies(browser):
+    context = browser.new_context()
+    context.add_cookies([{"name": "own", "value": "a1", "url": "http://bank.example.test/"},
+                         {"name": "theirs", "value": "b2", "url": "http://other.example.test/"}])
+    page = context.new_page()
+    page.goto("http://bank.example.test/moves")
+    page.add_script_tag(content=(ROOT / "providers" / "shared.js").read_text())
+    page.add_script_tag(content=(ROOT / "providers" / "added.page.js").read_text())
+    config = learned(page, "tbody tr:first-child a")
+    page.evaluate("(c) => { globalThis.__sweepAddedConfig = c; }", {**config, "origin": "http://bank.example.test", "name": "Acme"})
+    Local.heard.clear()
+    # Within the site, a redirect is followed with the site's own cookies.
+    got = page.evaluate("__sweep.fetchPdf({id: '2026-09-30'})")
+    assert got["ok"] and got["size"] == len(PDF)
+    assert Local.heard == [("bank.example.test", "/move/2/pdf", "own=a1"), ("bank.example.test", "/files/2.pdf", "own=a1")]
+    Local.heard.clear()
+    # To another site, it goes without the other site's cookies, and is refused.
+    assert page.evaluate("__sweep.fetchPdf({id: '2026-10-31'})") == {"ok": False, "why": "Its link went to another site."}
+    assert Local.heard == [("bank.example.test", "/move/1/pdf", "own=a1"), ("other.example.test", "/files/1.pdf", None)]
+    context.close()
 
 
 def test_the_recipe_presses_only_the_matching_link(site):
