@@ -5,6 +5,12 @@ What changed for people using Statement Sweep, newest first. The version is
 
 ## Unreleased
 
+- TriNet W-2: your W-2s from PaperlessEmployee, where TriNet's Taxes page
+  sends you. Each W-2 is a free online-download order on that site;
+  Statement Sweep places it only when the review is free, online and names
+  that one form, and saves the PDF while its link works.
+- W-2s now count as tax forms, so a site with them is flagged in tax season
+  until last year's is saved. Before, a title like "W-2" was missed.
 - TriNet: every paycheck stub, off-cycle ones too, from TriNet's HR
   Platform, for each company that paid you through TriNet.
 

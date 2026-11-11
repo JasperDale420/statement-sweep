@@ -370,6 +370,23 @@ export const PROVIDERS = [
     }
   },
   {
+    "id": "trinetw2",
+    "name": "TriNet W-2",
+    "match": [
+      "https://www.paperlessemployee.com/*"
+    ],
+    "listUrl": "https://identity.trinet.com/app/trinet_cicplusw2_1/exkkav3kaxc7iy5sz4x6/sso/saml",
+    "pageFile": "providers/trinetw2.page.js",
+    "fileName": "{date} TriNet {title}.pdf",
+    "family": "fetch",
+    "guide": {
+      "signIn": [
+        "Sign in to TriNet in this tab.",
+        "TriNet opens your W-2s on PaperlessEmployee. Statement Sweep carries on."
+      ]
+    }
+  },
+  {
     "id": "venmo",
     "name": "Venmo",
     "match": [
