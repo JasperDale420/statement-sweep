@@ -91,6 +91,9 @@ the extension deletes everything except the documents you saved.
 - **Downloads:** to save documents and give them the names you chose.
 - **Storage:** to remember the items listed above.
 - **Alarms:** to do the daily check of which sites are due.
+- **Favicon:** to show each site's small icon beside its name, in the popup
+  and on the guide card, from Chrome's own store of the icons of pages you
+  have visited. Nothing is fetched from the site for it.
 - **Content settings:** to let the site you are sweeping download more than one
   file in a row, and open a document in a new window when that is how the
   site hands it over. Both are set only for that site during a sweep and
