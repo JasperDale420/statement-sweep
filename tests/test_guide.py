@@ -183,7 +183,7 @@ const store = (o) => ({
 window.__fire = (m, sender) => on.message.set.forEach((f) => f(m, sender, () => {}));
 const runFiles = async (files) => { for (const f of files) (0, eval)(await (await fetch('/' + f)).text()); };
 Object.defineProperty(window, 'chrome', { value: {
-  runtime: { id: 'self', onMessage: on.message, onStartup: on.startup, onInstalled: on.installed, sendMessage: async () => {}, getPlatformInfo: () => {} },
+  runtime: { id: 'self', getURL: (p) => 'chrome-extension://self/' + p, onMessage: on.message, onStartup: on.startup, onInstalled: on.installed, sendMessage: async () => {}, getPlatformInfo: () => {} },
   action: { setBadgeBackgroundColor: async () => {}, setBadgeText: async () => {}, setTitle: async () => {} },
   storage: { local: store(__local), session: store(__session) },
   contentSettings: { automaticDownloads: setting, popups: setting },
@@ -210,7 +210,7 @@ START = """async () => {
   const root = await navigator.storage.getDirectory();
   await f.setFolder('destination', await root.getDirectoryHandle('Chosen', { create: true }));
   await import('/background.js');
-  __fire({ type: 'sweep', only: 'fake' }, {});
+  __fire({ type: 'sweep', only: 'fake' }, { id: 'self', url: 'chrome-extension://self/popup.html' });
   return true;
 }"""
 

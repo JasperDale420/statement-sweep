@@ -20,8 +20,9 @@
 // What a line may hold: the engine's and the recipe's own short words, page
 // addresses without their query or fragment (a hash route keeps its path),
 // and numbers. Every run of 5 or more digits keeps only its last 4, so an
-// account or parcel number becomes #####1234. Never page text, cookies or a
-// document's contents.
+// account or parcel number becomes #####1234, and so does a number written in
+// groups (####-####-1234). A path without a scheme loses its query too. Never
+// page text, cookies or a document's contents.
 import { getFolder, isGranted, withinChosen, writeFile } from "./folders.js";
 import { normalise, pathFor } from "./naming.js";
 
@@ -43,8 +44,19 @@ export const stamp = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d
 export const fileStamp = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 export const runFileName = (d) => `run-${fileStamp(d)}.log`;
 
-// A run of 5 or more digits keeps its last 4.
-export const maskDigits = (text) => String(text).replace(/\d{5,}/g, (run) => "#".repeat(run.length - 4) + run.slice(-4));
+// A run of 5 or more digits keeps its last 4. So do digits in groups joined
+// by single spaces or dashes, 8 or more in all, as a card or account number
+// is often written (1234-5678-9012): only the last 4 digits stay. A date
+// written YYYY-MM-DD is left as it is, and never joins a group.
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const maskRun = (run) => "#".repeat(run.length - 4) + run.slice(-4);
+export const maskDigits = (text) => String(text).replace(/\d{4}-\d{2}-\d{2}(?!\d)|\d+(?:[ -](?!\d{4}-\d{2}-\d{2}(?!\d))\d+)*/g, (found) => {
+  if (DATE.test(found)) return found;
+  const digits = found.replace(/\D/g, "").length;
+  if (digits < 8 || /^\d+$/.test(found)) return found.replace(/\d{5,}/g, maskRun);
+  let hide = digits - 4;
+  return found.replace(/\d/g, (d) => (hide-- > 0 ? "#" : d));
+});
 
 // An address without its query or fragment, and without any user name or
 // password in it. A hash route (#/… or #!/…) keeps its path, without a query
@@ -60,9 +72,12 @@ export function cleanUrl(address) {
 }
 
 // Text as it may go in a log: addresses cleaned, digits masked, not too long.
+// A path with no scheme (a document's id, "/docs/view?docId=…") loses its
+// query and ;params the same way.
 export function cleanText(text) {
   const plain = String(text === undefined ? "" : text)
     .replace(/\b(?:https?|blob|file|chrome-extension):[^\s"'<>()]+/gi, (u) => cleanUrl(u))
+    .replace(/(^|[\s"'(=,])(\/[^\s"'<>()?;]*)[?;][^\s"'<>()]+/g, "$1$2")
     .replace(/\r\n?/g, "\n");
   const masked = maskDigits(plain);
   return masked.length > MAX_TEXT ? `${masked.slice(0, MAX_TEXT)}… (cut)` : masked;

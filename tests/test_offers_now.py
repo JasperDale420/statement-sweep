@@ -34,10 +34,10 @@ OFFERS = """(() => {
 # seconds, and the sign-in wait's 2-second looks) cut to nothing, so a test
 # of the cap does not take a minute.
 ENGINE = base.ENGINE.replace(
-    "window.__fire = { message: (m) => on.message.set.forEach((f) => f(m, {}, () => {})) };",
-    "window.__fire = { message: (m) => on.message.set.forEach((f) => f(m, {}, () => {})),"
+    "window.__fire = { message: (m) => on.message.set.forEach((f) => f(m, __popup, () => {})) };",
+    "window.__fire = { message: (m) => on.message.set.forEach((f) => f(m, __popup, () => {})),"
     " ask: (m, sender) => new Promise((resolve) => on.message.set.forEach((f) => f(m, sender || {}, resolve))) };"
-).replace("runtime: { id: 'self',", "runtime: { id: 'self', getURL: (p) => 'chrome-extension://self/' + p,") + """
+) + """
 const realTimeout = window.setTimeout;
 window.setTimeout = (f, ms, ...rest) => realTimeout(f, ms >= 1500 && ms <= 4000 ? 1 : ms, ...rest);
 """

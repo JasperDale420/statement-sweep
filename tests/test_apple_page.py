@@ -192,6 +192,16 @@ def test_the_walk_visits_every_order_and_ends_back_on_the_list(tab):
     assert walk_state(tab) is None
 
 
+def test_the_walks_log_lines_name_no_order_number(tab):
+    load(tab, LIST, store())
+    # Read in the same call: the walk then leaves this page.
+    got = tab.evaluate("() => { const lines = []; globalThis.__sweepLog = (t) => { lines.push(String(t)); }; return [__sweep.nextView(), lines]; }")
+    assert got[0] == {"moved": True}
+    lines = got[1]
+    assert "Next: the details of order 1 of this walk." in lines
+    assert not any("W000" in line for line in lines), lines
+
+
 def test_next_view_on_a_finished_walk_does_not_move(tab):
     load(tab, LIST, store())
     set_walk(tab, ["W0000000002", "W0000000001"])
