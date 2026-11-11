@@ -42,3 +42,5 @@
 202312-00  # stand-in IRS transcript id (year and month, then 00)
 77777700011-2025  # stand-in Shelby County notice id, then its year
 987-654-321  # stand-in TreasuryDirect account (B-987-654-321)
+1234-5678-9012  # counting digits in grouped-number masking examples (log.js, test_log.py)
+1234 5678 9012 3456  # counting digits in grouped-number masking examples (test_log.py)
