@@ -1,0 +1,11 @@
+# Keeps the CI actions (pinned to commits) and the test tools up to date.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
