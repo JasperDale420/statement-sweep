@@ -39,9 +39,16 @@ def list_page(rows=None, online=True):
 
 
 def review_page(form="2031 W-2", popup="", paid="", delivery="Your forms will be delivered online", extra=""):
-    return ('<!doctype html><title>Confirmation</title><h2>Summary Of Your Order</h2>'
+    # Shaped like the real review: a sign-in line with a time, dialogs the
+    # page keeps hidden until needed, and "will NOT be emailed" beside the
+    # online delivery.
+    return ('<!doctype html><title>Confirmation</title>'
+            '<p>Account Name: Example Person</p><p>Last login: 11/10/2031 4:05 PM PT Failed login attempts: 0</p>'
+            '<h2>Summary Of Your Order</h2>'
             f'<input type="hidden" id="popupToken" value="{popup}">'
-            f'<p>{form} EXAMPLE EMPLOYER, INC.</p><p>{delivery}</p>{extra}'
+            f'<p>{form} EXAMPLE EMPLOYER, INC.</p><p>{delivery}</p><p>Forms will NOT be emailed to you.</p>{extra}'
+            '<div class="modal" style="display:none">Session Timeout You will be logged off in 60 seconds.</div>'
+            '<script>var fee = "$9.99";</script>'
             f'<form id="frmConfirmation" action="{SUBMIT}" method="post">'
             '<input type="hidden" name="__RequestVerificationToken" value="review-token">'
             '<input type="hidden" name="xsec_responseAuthorize" value="">'
@@ -191,8 +198,23 @@ def test_a_free_online_order_of_one_form_brings_back_its_pdf(tab):
     (review_page(popup="card-popup"), "card payment"),
     (review_page(paid="attempt-1"), "card payment"),
     (review_page(extra="<p>Order Total: $5.00</p>"), "not free"),
+    # A fee however it is written: without a leading digit, as a currency
+    # code, with the "$" drawn by CSS, full-width, or in a field.
+    (review_page(extra="<p>Processing fee: $.50</p>"), "not free"),
+    (review_page(extra="<p>Total: USD 5.00</p>"), "not free"),
+    (review_page(extra="<p>Total: <span class='dollar'></span>5.00</p>"), "not free"),
+    (review_page(extra="<p>Fee \uff045</p>"), "not free"),
+    (review_page(extra="<input type='text' name='OrderTotal' value='4.95'>"), "not free"),
+    (review_page(extra="<input type='hidden' name='CardAmount' value='$2'>"), "not free"),
     (review_page(delivery="Your forms will be mailed to you"), "online download"),
+    # "delivered online" only in hidden or script text does not count.
+    (review_page(delivery="Your forms will be sent", extra="<div hidden>Your forms will be delivered online</div>"), "online download"),
+    (review_page(delivery="Your forms will be sent", extra="<script>// delivered online</script>"), "online download"),
+    (review_page(delivery="Your forms will be delivered online and a copy mailed by postal service"), "online download"),
     (review_page(form="2030 W-2"), "name this form"),
+    # "2031 W-2c" is another form; and a form left from an earlier order rides along.
+    (review_page(form="2031 W-2c"), "name this form"),
+    (review_page(extra="<p>2030 W-2 EXAMPLE EMPLOYER, INC.</p>"), "another form"),
     ("<!doctype html><p>Something else</p>", "review was not"),
 ])
 def test_an_order_that_is_not_a_free_online_download_of_this_form_is_never_submitted(tab, review, why):

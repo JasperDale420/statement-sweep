@@ -5,6 +5,20 @@ What changed for people using Statement Sweep, newest first. The version is
 
 ## Unreleased
 
+- Security fixes from a full review:
+  - TriNet W-2 places its free order only when the review page plainly
+    shows nothing to pay, online delivery, and only that one form.
+  - A download that is not a PDF is no longer counted as saved, so it is
+    tried again next time.
+  - A site that hangs no longer leaves a sync stuck: each step has a time
+    limit, and Stop cuts short a list read.
+  - Logs drop the query part of document addresses and mask account
+    numbers written in groups; Apple's run log no longer names orders.
+  - Added sites send cookies only to their own site, refuse more links
+    that act (order, request, send, schedule and others), and the picker
+    is drawn only on the site you allowed.
+  - Only Statement Sweep's own pages can start a sync, and very long or
+    very many document ids from a site are refused.
 - TriNet W-2: your W-2s from PaperlessEmployee, where TriNet's Taxes page
   sends you. Each W-2 is a free online-download order on that site;
   Statement Sweep places it only when the review is free, online and names

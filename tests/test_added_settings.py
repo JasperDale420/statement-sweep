@@ -47,7 +47,8 @@ Object.defineProperty(window, 'chrome', { value: {
   },
   tabs: {
     create: async (o) => { __calls.push(['create', o]); return { id: 77, url: o.url, status: 'loading' }; },
-    get: async (id) => ({ id, status: 'complete' }),
+    // The new tab once loaded: on the list page, unless a test sends it elsewhere.
+    get: async (id) => ({ id, status: 'complete', url: window.__landed || 'https://bank.example.test/statements' }),
   },
   scripting: { executeScript: async (o) => { __calls.push(['script', o.files || (o.args || [])]); return [{ result: 'shown' }]; } },
 } });
@@ -167,6 +168,18 @@ def test_pick_again_opens_the_statements_page_with_the_picker(browser):
         ["script", ["providers/added.page.js", "picker.js"]],
         ["script", [{"name": "Acme"}]],
     ]
+    t.close()
+
+
+def test_pick_again_draws_no_picker_where_the_page_sent_the_tab_elsewhere(browser):
+    t = open_settings(browser, {"addedSites": [ACME]})
+    t.wait_for_selector("#addedList .added-site")
+    t.evaluate("window.__landed = 'https://elsewhere.example.test/sign-in'")
+    t.click("button[aria-label='Pick a statement link again for Acme']")
+    t.wait_for_function("document.getElementById('addedStatus').textContent !== ''")
+    assert t.inner_text("#addedStatus") == ("The picker wasn't drawn: the new tab left bank.example.test. Open its statements page "
+                                            "and press Add This Site in Statement Sweep's menu.")
+    assert [c[0] for c in t.evaluate("__calls")] == ["request", "create"]
     t.close()
 
 

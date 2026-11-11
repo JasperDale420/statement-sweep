@@ -101,6 +101,30 @@ def test_an_address_inside_a_line_is_cleaned_too(tab):
         == "went to https://bank.test/x then stopped"
 
 
+def test_a_path_without_a_scheme_loses_its_query_and_params(tab):
+    got = call(tab, "arg.map(m.cleanText)", [
+        "Document /docs/view?docId=123&acct=4455 by fetch: saved.",
+        "saving /api/file;jsessionid=abc: failed",
+        "at (/a/b?x=1) and =/c?y=2",
+        "and/or? stays, /plain/path stays, /p; then",
+    ])
+    assert got == ["Document /docs/view by fetch: saved.", "saving /api/file failed",
+                   "at (/a/b) and =/c", "and/or? stays, /plain/path stays, /p; then"]
+
+
+def test_numbers_written_in_groups_keep_only_their_last_four_digits(tab):
+    got = call(tab, "arg.map(m.maskDigits)", [
+        "card 1234-5678-9012, card 1234 5678 9012 3456",
+        "on 2026-11-10, from 2026-10-01 2026-10-31, 1 2026-11-10",
+        "page 12 of 34, 555-0100, 3 of 12 34",
+        "2026-11-10 1234 5678",
+    ])
+    assert got == ["card ####-####-9012, card #### #### #### 3456",
+                   "on 2026-11-10, from 2026-10-01 2026-10-31, 1 2026-11-10",
+                   "page 12 of 34, 555-0100, 3 of 12 34",
+                   "2026-11-10 #### 5678"]
+
+
 def test_a_line_has_the_time_level_and_site(tab):
     got = call(tab, "m.formatLine(new Date(2026, 9, 12, 16, 43, 32, 244), 'INFO', 'chase', arg)", "Chase: 1 card(s) x 8 year(s)")
     assert got == "2026-10-12 16:43:32.244 INFO   chase: Chase: 1 card(s) x 8 year(s)"
@@ -331,10 +355,12 @@ const on = { message: listeners(), removed: listeners(), replaced: listeners(), 
 const gone = (id) => new Error(`No tab with id: ${id}.`);
 const tabOf = (id) => { const t = __tabs.get(id); if (!t) throw gone(id); return { ...t }; };
 const setting = { set: async () => {}, clear: async () => {} };
-window.__fire = { message: (m) => on.message.set.forEach((f) => f(m, {}, () => {})) };
+// A run is asked for from the extension's own popup, as popup.js does.
+window.__popup = { id: 'self', url: 'chrome-extension://self/popup.html' };
+window.__fire = { message: (m) => on.message.set.forEach((f) => f(m, __popup, () => {})) };
 const runRecipe = async (files) => { for (const f of files) (0, eval)(await (await fetch('/' + f)).text()); };
 Object.defineProperty(window, 'chrome', { value: {
-  runtime: { id: 'self', onMessage: on.message, onStartup: on.startup, onInstalled: on.installed, sendMessage: async () => {}, getPlatformInfo: () => {} },
+  runtime: { id: 'self', getURL: (p) => 'chrome-extension://self/' + p, onMessage: on.message, onStartup: on.startup, onInstalled: on.installed, sendMessage: async () => {}, getPlatformInfo: () => {} },
   action: { setBadgeBackgroundColor: async () => {}, setBadgeText: async () => {}, setTitle: async () => {} },
   storage: { local: __chromeLocal, session: {
     get: async (k) => { const out = {}; for (const key of [].concat(k)) if (key in __session) out[key] = JSON.parse(JSON.stringify(__session[key])); return out; },
