@@ -77,6 +77,19 @@ def test_a_sites_own_name_is_cleaned_too(tab):
     assert name.endswith(".pdf") and "\\u0007" not in name and len(name) == 124
 
 
+def test_dollar_marks_in_a_sites_own_title_or_id_are_kept_as_written(tab):
+    site = {"id": "s", "name": "Site", "fileName": "{date} {title} {id}.pdf"}
+    doc = {"id": "a$'b", "date": "2026-10-28", "title": "Fee $& $` $$ refund"}
+    assert path(tab, None, site, doc).endswith("/2026-10-28 Fee $& $` $$ refund a$'b.pdf")
+
+
+def test_invisible_format_marks_cannot_disguise_a_name(tab):
+    doc = {"id": "x", "date": "2026-10-28", "title": "Invoice ‮fdp.exe‬ ​now﻿"}
+    got = path(tab, {"file": "{title}"}, doc=doc)
+    assert got == "Statement Sweep/American Express/Invoice fdp.exe now.pdf"
+    assert path(tab, None, doc=doc).endswith("/2026-10-28 American Express Invoice fdp.exe now.pdf")
+
+
 def test_a_pattern_cannot_climb_out_of_downloads(tab):
     got = path(tab, {"base": "../../secret", "folder": "..", "file": "x"})
     assert ".." not in got and got == "secret/x.pdf"

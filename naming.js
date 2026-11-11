@@ -74,8 +74,10 @@ function render(nodes, fields) {
 }
 
 // One folder or file name. Chrome refuses a path with an illegal part, so a
-// value can neither break a save nor make a folder of its own.
-const clean = (text) => text.replace(/[/\\:*?"<>|\x00-\x1f]/g, "-").replace(/\s+/g, " ").replace(/^[. ]+/, "").trim().slice(0, LONGEST_PART).replace(/[. ]+$/, "");
+// value can neither break a save nor make a folder of its own. Invisible
+// format marks (such as a right-to-left override) are dropped, so a name
+// shows as what it is.
+const clean = (text) => text.replace(/\p{Cf}/gu, "").replace(/[/\\:*?"<>|\x00-\x1f]/g, "-").replace(/\s+/g, " ").replace(/^[. ]+/, "").trim().slice(0, LONGEST_PART).replace(/[. ]+$/, "");
 
 // "" when the pattern is good, or what is wrong with it.
 export function checkPattern(pattern, { isFile = false } = {}) {
@@ -115,7 +117,8 @@ const fieldsOf = (provider, doc) => {
 
 // The provider's own name for a document, used until you set a pattern.
 const providersOwnName = (provider, doc) => {
-  const name = provider.fileName.replace("{date}", doc.date).replace("{title}", doc.title || "Document").replace("{id}", doc.id);
+  // Functions, so a "$&" in a title or id is kept as written.
+  const name = provider.fileName.replace("{date}", () => doc.date).replace("{title}", () => doc.title || "Document").replace("{id}", () => doc.id);
   return `${clean(name.replace(/\.pdf$/i, "")) || "Document"}.pdf`;
 };
 
