@@ -69,7 +69,8 @@ def tab():
         b.close()
 
 
-def load(tab, path=LIST, body="<main>Tax Statements</main>", listing=None, review=None, done=DONE_PAGE, pdf=None, landing=None):
+def load(tab, path=LIST, body="<main>Tax Statements</main>", listing=None, review=None, done=DONE_PAGE, pdf=None, landing=None,
+         fresh=True):
     """Stand in for PaperlessEmployee. Returns the requests asked, with POST bodies."""
     asked = []
     listing = listing if listing is not None else list_page()
@@ -104,6 +105,8 @@ def load(tab, path=LIST, body="<main>Tax Statements</main>", listing=None, revie
     tab.unroute("**/*")
     tab.route("**/*", respond)
     tab.goto(BASE + path)
+    if fresh:
+        tab.evaluate("sessionStorage.clear()")
     tab.add_script_tag(content=(ROOT / "providers" / "shared.js").read_text())
     tab.add_script_tag(content=(ROOT / "providers" / "trinetw2.page.js").read_text())
     return asked
@@ -168,16 +171,76 @@ def test_a_page_of_another_shape_stops(tab):
     assert read(tab)["state"] == "stopped"
 
 
-def test_signed_out_is_known_by_the_address_and_the_password_field(tab):
+# A TriNet employee has no PaperlessEmployee password: its own sign-in page
+# is answered no_list, so the engine sends the tab back through TriNet.
+def test_paperlessemployee_s_own_sign_in_sends_the_tab_back_through_trinet(tab):
     load(tab, path="/trinettaxforms/PE/Login")
-    assert read(tab) == {"state": "signed_out"}
+    assert read(tab) == {"state": "no_list"}
     load(tab, body="<input type=password>")
-    assert read(tab) == {"state": "signed_out"}
+    assert read(tab) == {"state": "no_list"}
 
 
-def test_a_list_answered_with_a_sign_in_is_signed_out(tab):
+def test_a_list_answered_with_a_sign_in_sends_the_tab_back_through_trinet(tab):
     load(tab, landing="<!doctype html><form><input type=password></form>")
+    assert read(tab) == {"state": "no_list"}
+
+
+# -- TriNet's hand-off ----------------------------------------------------------------------
+
+TRINET = "https://trinet.hrpassport.com"
+SAML_ERROR = "<p>There was a problem processing your login request.</p><p>SAML Error Code(s): CX0000</p>"
+
+
+def load_trinet(tab, at, body="<main>TriNet</main>"):
+    """Stand in for one of TriNet's own pages."""
+    tab.unroute("**/*")
+    tab.route("**/*", lambda r: r.fulfill(status=200, content_type="text/html",
+                                          body=f"<!doctype html><title>TriNet</title>{body}")
+              if r.request.url.startswith(TRINET) else r.abort())
+    tab.goto(TRINET + at)
+    tab.add_script_tag(content=(ROOT / "providers" / "shared.js").read_text())
+    tab.add_script_tag(content=(ROOT / "providers" / "trinetw2.page.js").read_text())
+
+
+def test_trinet_s_w2_link_is_left_to_hand_the_tab_on(tab):
+    load_trinet(tab, "/#/ssowidget/cicplus_w2")
+    assert read(tab) == {"state": "walking"}
+
+
+def test_another_trinet_page_signed_in_is_no_list_so_the_tab_goes_to_the_w2_link(tab):
+    load_trinet(tab, "/ui-portal-global/#/app.main.iapp")
+    assert read(tab) == {"state": "no_list"}
+    load_trinet(tab, "/#/ssowidget/cicplus_w2x")
+    assert read(tab) == {"state": "no_list"}
+
+
+def test_trinet_s_sign_in_is_signed_out(tab):
+    load_trinet(tab, "/", body="<input type=password>")
     assert read(tab) == {"state": "signed_out"}
+
+
+def test_a_turned_down_sign_in_is_tried_again_once_then_stops_with_why(tab):
+    load(tab, path="/SAML2Portal.aspx", body=SAML_ERROR)
+    assert read(tab) == {"state": "no_list"}
+    assert read(tab) == {"state": "no_list"}, "reads of one page are one failure"
+    load(tab, path="/SAML2Portal.aspx", body=SAML_ERROR, fresh=False)
+    got = read(tab)
+    assert got["state"] == "stopped" and got["docs"] == [] and "TriNet" in got["why"]
+
+
+def test_a_turned_down_sign_in_long_ago_is_tried_again(tab):
+    load(tab, path="/SAML2Portal.aspx", body=SAML_ERROR)
+    tab.evaluate("sessionStorage.setItem('statementSweepFailedHandOffs', JSON.stringify([performance.timeOrigin - 3600000]))")
+    assert read(tab) == {"state": "no_list"}
+
+
+def test_a_list_read_forgets_an_earlier_turned_down_sign_in(tab):
+    load(tab, path="/SAML2Portal.aspx", body=SAML_ERROR)
+    read(tab)
+    load(tab, fresh=False)
+    assert read(tab)["state"] == "ok"
+    load(tab, path="/SAML2Portal.aspx", body=SAML_ERROR, fresh=False)
+    assert read(tab) == {"state": "no_list"}
 
 
 # -- the order ------------------------------------------------------------------------

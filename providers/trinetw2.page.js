@@ -1,7 +1,9 @@
 // Runs inside PaperlessEmployee (CIC Plus), where TriNet keeps W-2s. TriNet's
-// own Taxes page sends you here through its sign-in ("You're leaving TriNet");
-// this site's list address is that same sign-in link, so the tab lands here
-// signed in as you, the way TriNet's own button brings you.
+// own Taxes page sends you here ("You're leaving TriNet") by opening its
+// widget page, trinet.hrpassport.com/#/ssowidget/cicplus_w2, which signs you
+// in here. This site's list address is that same page. TriNet's bare sign-on
+// link (identity.trinet.com/app/...) is not used: PaperlessEmployee turns it
+// down with a SAML error.
 //
 // The list is the Tax Statements page: one row per form, each with the id the
 // site gives it, read with a GET. Nothing is pressed.
@@ -18,6 +20,8 @@
 // places nothing.
 (() => {
   const HOST = "www.paperlessemployee.com";
+  const TRINET = "trinet.hrpassport.com";
+  const WIDGET = /^#\/ssowidget\/cicplus_w2(?:$|[/?])/;
   const ROOT = "/trinettaxforms/PE/";
   const LIST = `${ROOT}TaxStatements`;
   const SUBMIT = `${ROOT}TaxStatements/SubmitOrderV4`;
@@ -69,14 +73,52 @@
     return { form, rows, unread };
   }
 
+  // PaperlessEmployee's answer to a sign-in it turned down: its SAML2Portal
+  // page, "There was a problem processing your login request".
+  const handOffFailed = () => /saml/i.test(location.pathname) || /problem processing your login request/.test(visibleText());
+
+  // The tab is on PaperlessEmployee's error page after TriNet's hand-off.
+  // The first time, no_list: the engine sends the tab back through TriNet's
+  // W-2 link, which signs in afresh. If the tab lands here again, the sweep
+  // stops and says why, rather than waiting on a page no sign-in fixes.
+  // Page loads are counted (not reads, which come every few seconds), in
+  // this tab's sessionStorage, for a few minutes only, so a later sweep in
+  // the same tab tries again; a list read cleans it up.
+  const FAILED = "statementSweepFailedHandOffs";
+  const RECENT_MS = 3 * 60 * 1000;
+  const failedLoads = () => { try { return JSON.parse(sessionStorage.getItem(FAILED) || "[]"); } catch (e) { return []; } };
+  function afterFailedHandOff() {
+    const load = performance.timeOrigin;
+    const loads = failedLoads().filter((t) => typeof t === "number" && Math.abs(load - t) < RECENT_MS);
+    if (!loads.includes(load)) loads.push(load);
+    try { sessionStorage.setItem(FAILED, JSON.stringify(loads.slice(-5))); } catch (e) { /* not kept: retry */ }
+    if (loads.length < 2) return { state: "no_list" };
+    return { state: "stopped", docs: [],
+      why: "PaperlessEmployee turned down TriNet's sign-in twice. Open your W-2 from TriNet's Taxes page, then run this again." };
+  }
+
   async function readList() {
-    if (signedOut()) return { state: "signed_out" };
+    // TriNet's own pages. Its W-2 link (Money, Taxes, "View form W-2") opens
+    // the widget page, which hands the tab on to PaperlessEmployee signed in.
+    // Signed in on any other TriNet page (its sign-in lands on home), the
+    // answer is no_list, and the engine sends the tab to that link.
+    if (location.hostname === TRINET) {
+      if (document.querySelector("input[type='password']")) return { state: "signed_out" };
+      if (CHALLENGE.some((m) => visibleText().includes(m))) return { state: "challenge" };
+      return WIDGET.test(location.hash) ? { state: "walking" } : { state: "no_list" };
+    }
+    if (location.hostname !== HOST) return { state: "signed_out" };
+    if (handOffFailed()) return afterFailedHandOff();
+    // PaperlessEmployee's own sign-in or timeout page: a TriNet employee has
+    // no password here, so the way back in is TriNet's link again.
+    if (signedOut()) return { state: "no_list" };
     if (CHALLENGE.some((m) => visibleText().includes(m))) return { state: "challenge" };
     let got;
     try { got = await askPage(LIST); } catch (e) { return { state: "stopped", why: "PaperlessEmployee's Tax Statements did not answer.", docs: [] }; }
-    if (got.signedOut) return { state: "signed_out" };
+    if (got.signedOut) return { state: "no_list" };
     const list = got.page && listOf(got.page);
     if (!list) return { state: "stopped", why: `PaperlessEmployee's Tax Statements was not the page this reads${got.status ? ` (${got.status})` : ""}.`, docs: [] };
+    try { sessionStorage.removeItem(FAILED); } catch (e) { /* nothing kept */ }
 
     // Dated the last day of the tax year, so the year is the form's own.
     const docs = [];

@@ -57,18 +57,19 @@ def own_host(meta, host):
         or host in meta.get("fileHosts", [])
 
 
-# Sites whose list address is a sign-in on another host (TriNet W-2 starts at
-# TriNet's own sign-in link): the page on their own host the sign-in lands on.
+# Sites whose list address only passes the tab on (TriNet W-2 starts at
+# TriNet's own W-2 link): the page the list is read on.
 SIGNED_IN_PAGE = {"trinetw2": "https://www.paperlessemployee.com/trinettaxforms/PE/TaxStatements"}
 
 
 def stand_in_url(meta):
     """The stand-in's address: the site's list address, or where its sign-in lands."""
+    if meta["id"] in SIGNED_IN_PAGE:
+        return SIGNED_IN_PAGE[meta["id"]]
     url = meta["listUrl"]
     if own_host(meta, urlsplit(url).hostname):
         return url
-    assert meta["id"] in SIGNED_IN_PAGE, f"{meta['id']}: its list address is on another host; say where its sign-in lands"
-    return SIGNED_IN_PAGE[meta["id"]]
+    raise AssertionError(f"{meta['id']}: its list address is on another host; say where its sign-in lands")
 
 
 DOCS = [
