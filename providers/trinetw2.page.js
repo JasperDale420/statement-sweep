@@ -99,11 +99,41 @@
     return { state: "ok", docs };
   }
 
-  // Every dollar amount on a page, as numbers.
-  const amounts = (text) => [...String(text).matchAll(/\$\s*([\d,]+(?:\.\d{1,2})?)/g)].map((m) => Number(m[1].replace(/,/g, "")));
+  // Every amount of money in a text, as numbers: "$5.00", "$.50", "USD 5",
+  // "US$ 4.95", a full-width "＄5", and a bare "5.00" whose "$" a page may
+  // draw with CSS. Anything shaped like money counts, so a fee written in a
+  // way not foreseen here is still seen.
+  const MONEY = /(?:US\$|\$|＄|USD)\s*(\d[\d,]*(?:\.\d+)?|\.\d+)|(\d[\d,]*\.\d{2})(?!\d)/gi;
+  const amounts = (text) => [...String(text).matchAll(MONEY)].map((m) => Number(String(m[1] || m[2]).replace(/,/g, "")));
+
+  // The words a page shows: its text without scripts, styles, templates and
+  // what it hides. A parsed page has no layout, so hidden means marked so.
+  function shownText(page) {
+    const out = [];
+    const walk = (node) => {
+      for (const child of node.childNodes) {
+        if (child.nodeType === 3) { out.push(child.nodeValue); continue; }
+        if (child.nodeType !== 1) continue;
+        const el = child;
+        if (/^(script|style|template|noscript|head)$/i.test(el.tagName)) continue;
+        if (el.hidden || el.getAttribute("aria-hidden") === "true") continue;
+        if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute("style") || "")) continue;
+        out.push(" ");
+        walk(el);
+        out.push(" ");
+      }
+    };
+    if (page.body) walk(page.body);
+    return squash(out.join(""));
+  }
+  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // How often a form's "2025 W-2" stands in a text as itself ("2025 W-2c" is another form).
+  const timesNamed = (text, label) => (text.match(new RegExp(`(?<![A-Za-z0-9])${escape(label).replace(/\\-|-/g, "-?")}(?![A-Za-z0-9])`, "gi")) || []).length;
 
   // Why the review page is not a free online order of this one form, or "".
-  function notFree(page, label) {
+  // `others` are the other forms the list shows: none of them may be in the
+  // order. Every check must pass; none can pass by finding nothing.
+  function notFree(page, label, others = []) {
     const form = [...page.forms].find((f) => (f.getAttribute("action") || "") === SUBMIT);
     if (!form) return "The order's review was not the page this reads.";
     const token = page.getElementById("popupToken");
@@ -112,10 +142,23 @@
       const field = form.elements.namedItem(name);
       if (field && field.value) return "PaperlessEmployee asked for a card payment.";
     }
-    const text = squash(page.body ? page.body.textContent : "");
+    // Any field on the page that carries a payment or a sum must be empty or nothing.
+    for (const field of page.querySelectorAll("input, select, textarea")) {
+      if (/^(__RequestVerificationToken|popupToken|xsec_responseAuthorize|xsec_paymentAttemptId|action)$/.test(field.name || field.id || "")) continue;
+      if (!/pay|card|cc|amount|total|price|fee|charge|cost/i.test(`${field.name || ""} ${field.id || ""}`)) continue;
+      const value = String(field.value || "").trim();
+      if (value && !/^\$?\s*0*(\.0+)?$/.test(value)) return "The order was not free.";
+    }
+    const text = shownText(page);
     if (amounts(text).some((n) => n !== 0)) return "The order was not free.";
-    if (!/delivered online/i.test(text)) return "The order was not for an online download.";
-    if (!text.includes(label)) return "The order's review did not name this form.";
+    if (!/delivered online/i.test(text) || /\b(mail(ed)?|postal|ship(ped|ping)?)\b/i.test(text.replace(/will not be e-?mailed|not be emailed/gi, ""))) {
+      return "The order was not for an online download.";
+    }
+    const named = timesNamed(text, label);
+    if (!named) return "The order's review did not name this form.";
+    // A form the site still holds from an earlier order must not ride along.
+    if (others.some((o) => o !== label && timesNamed(text, o))) return "The order's review named another form too.";
+    if (others.includes(label) && named > 1) return "The order's review named this form more than once.";
     return "";
   }
 
@@ -148,7 +191,8 @@
       const review = await askPage(LIST, { method: "POST", body: pick });
       if (review.signedOut) return { ok: false, signedOut: true, why: "PaperlessEmployee asked for a sign-in." };
       if (!review.page) return { ok: false, why: `PaperlessEmployee did not review the order${review.status ? ` (${review.status})` : ""}.` };
-      const why = notFree(review.page, label);
+      const others = list.rows.filter((r) => r.key !== key).map((r) => `${r.year} ${r.name}`);
+      const why = notFree(review.page, label, others);
       if (why) return { ok: false, why };
 
       // 2. Submit the free order, as the page's own Submit Order does when no
