@@ -5,6 +5,11 @@ What changed for people using Statement Sweep, newest first. The version is
 
 ## Unreleased
 
+- TriNet W-2 starts from TriNet's own W-2 link, as its Taxes page does.
+  The sign-on link it used before was turned down by PaperlessEmployee,
+  and the sweep then waited for a sign-in that could never finish. If the
+  hand-off fails, the tab is sent through TriNet once more, then the sweep
+  stops and says why.
 - Security fixes from a full review:
   - TriNet W-2 places its free order only when the review page plainly
     shows nothing to pay, online delivery, and only that one form.
