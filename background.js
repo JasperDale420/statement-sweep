@@ -195,7 +195,8 @@ async function inPage(tabId, provider, func, args = []) {
       [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
     }, stoppable);
   } catch (e) {
-    logs.error(provider, `inPage ${func.name || "script"} in tab ${tabId}`, e);
+    if (stoppable && stopAsked) note(provider, `inPage ${func.name || "script"} in tab ${tabId} cut short: Stop was pressed.`);
+    else logs.error(provider, `inPage ${func.name || "script"} in tab ${tabId}`, e);
     throw e;
   }
   if (result && Array.isArray(result.log)) for (const text of result.log) note(provider, `page: ${text}`);
